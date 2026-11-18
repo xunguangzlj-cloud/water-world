@@ -30,8 +30,21 @@ async function prepareAvatar() {
   const [vertices,indices,animation,picture] = meta.lengths.map(size=>{
     const part=new Uint8Array(raw,offset,size); offset+=size; return part;
   });
-  const vertexBuffer=buf(vertices,BU.VERTEX), indexBuffer=buf(indices,BU.INDEX), indexCount=indices.byteLength/4;
-  const samples=new Float32Array(animation.slice().buffer), stride=meta.bones*16;
+  // v2 按字节分列并存相邻行的差值，还原为 WebGPU 直接使用的顶点与索引。
+  function meshBytes(bytes,stride) {
+    if(meta.meshEncoding!==2) return bytes;
+    const result=new Uint8Array(bytes.length), count=bytes.length/stride;
+    for(let channel=0;channel<stride;channel++){
+      let value=0, src=channel*count;
+      for(let dst=channel;dst<result.length;dst+=stride){
+        value=(value+bytes[src++])&255;
+        result[dst]=value;
+      }
+    }
+    return result;
+  }
+  const vertexBuffer=buf(meshBytes(vertices,24),BU.VERTEX), indexBuffer=buf(meshBytes(indices,4),BU.INDEX), indexCount=indices.byteLength/4;
+  const samples=new Float32Array(animation.buffer,animation.byteOffset,animation.byteLength/4), stride=meta.bones*16;
   const pose=new Float32Array(stride), from=new Float32Array(stride);
   const wetPose=new Float32Array(stride), chain=new Float32Array(stride);
   for(let i=0;i<stride;i+=16) chain[i]=chain[i+5]=chain[i+10]=chain[i+15]=1;

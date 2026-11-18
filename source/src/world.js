@@ -130,7 +130,20 @@ function makeWorld(D, T, flyPts, POSES) {
   };
   const pickV = () => ((rnd() * T.nv) | 0) * 3;
   const tangent = (n) => { let t = abs(n[1]) < 0.9 ? [n[2], 0, -n[0]] : [1, 0, 0]; const l = hypot(...t); t = t.map((v) => v / l); return [t, [n[1] * t[2] - n[2] * t[1], n[2] * t[0] - n[0] * t[2], n[0] * t[1] - n[1] * t[0]]]; };
-  const nearFly = (x, y, z, r) => { for (const p of flyPts) if (hypot(x - p[0], z - p[2]) < r && y < p[1] + 3 && y > p[1] - 13) return true; return false; };
+  // 将路线采样点登记到六米避让范围内的网格；生成珊瑚、碎礁和海藻时只查当前格。
+  const flightCells=Array.from({length:nCells},()=>[]);
+  for(const p of flyPts){
+    const first=cellOf(p[0]-6,p[2]-6), last=cellOf(p[0]+6,p[2]+6);
+    for(let z=floor(first/CELLS);z<=floor(last/CELLS);z++)
+      for(let x=first%CELLS;x<=last%CELLS;x++) flightCells[x+CELLS*z].push(p);
+  }
+  const nearFly = (x,y,z,r) => {
+    for(const p of flightCells[cellOf(x,z)]){
+      const dx=x-p[0], dz=z-p[2];
+      if(dx*dx+dz*dz<r*r && (y===null || (y<p[1]+3 && y>p[1]-13))) return true;
+    }
+    return false;
+  };
   const nearPose = (x, z, r = 3) => { for (const p of POSES) if (hypot(x - p[0], z - p[2]) < r) return true; return false; };
   // --- kelp columns
   const column = (x, y, z, H, kind, dens = 1) => {
@@ -172,7 +185,7 @@ function makeWorld(D, T, flyPts, POSES) {
     if (!c.length) return;
     const i = c[(rnd() * c.length) | 0], y = f[i];
     if (grad(x, y, z)[1] < 0.55) return;
-    if (!force && flyPts.some((p) => hypot(x - p[0], z - p[2]) < 5)) return;
+    if (!force && nearFly(x,null,z,5)) return;
     occ.add(key);
     column(x, y - 0.3, z, min(f[i + 1] - rr(0.8, 5), force ? rr(30, 42) : rr(15, 40)), kind, dens);
   };
@@ -264,7 +277,7 @@ function makeWorld(D, T, flyPts, POSES) {
     let made = 0;
     for (let i = 0; i < 400000 && made < g[3]; i++) {
       const k = pickV(), x = T.wp[k], y = T.wp[k + 1], z = T.wp[k + 2];
-      if (hypot(x - g[0], z - g[1]) > g[2] || y > -14 || T.wn[k + 1] < -0.1 || nearFly(x, y, z, 2.2)) continue;
+      if ((x-g[0])**2+(z-g[1])**2 > g[2]**2 || y > -14 || T.wn[k + 1] < -0.1 || nearFly(x, y, z, 2.2)) continue;
       made++;
       const coral = T.wn[k + 1] > 0.85 || rnd() < 0.3, nx = T.wn[k], ny = T.wn[k + 1] + (coral ? 0.9 : 1.1), nz = T.wn[k + 2], l = hypot(nx, ny, nz);
       const sc = coral ? rr(0.5, 1.4) : rr(0.35, 0.9) * (rnd() < 0.15 ? 1.7 : 1);

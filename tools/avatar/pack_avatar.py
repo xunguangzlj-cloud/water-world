@@ -70,7 +70,19 @@ view=g['bufferViews'][g['images'][0]['bufferView']]
 im=Image.open(io.BytesIO(data[view['byteOffset']:view['byteOffset']+view['byteLength']]))
 im.thumbnail((2048,2048),Image.Resampling.LANCZOS)
 tex=io.BytesIO(); im.save(tex,'WEBP',quality=91,method=5)
-parts=[np.concatenate(verts).tobytes(),np.concatenate(indices).tobytes(),np.concatenate(frames).tobytes(),tex.getvalue()]
+# 按三角面首次使用的顺序排列顶点。只有所有 24 个字节都相同的顶点才可共用。
+vertices = np.concatenate(verts).view('V24').ravel()
+unique, inverse = np.unique(vertices, return_inverse=True)
+original_indices = np.concatenate(indices)
+used, first, triangles = np.unique(inverse.ravel()[original_indices], return_index=True, return_inverse=True)
+order = first.argsort()
+vertices = unique[used[order]].view('u1').reshape(-1, 24)
+triangles = order.argsort()[triangles].astype('<u4').view('u1').reshape(-1, 4)
+
+def delta_planes(rows):
+    return np.diff(rows, axis=0, prepend=np.zeros_like(rows[:1])).T.tobytes()
+
+parts=[delta_planes(vertices),delta_planes(triangles),np.concatenate(frames).tobytes(),tex.getvalue()]
 # 水流只驱动原网格实际使用的发束、刘海和裙片关节。
 strands=[]
 for i,bone in enumerate(names):
@@ -84,8 +96,8 @@ for i,bone in enumerate(names):
 guard_names=['Pelvis','Spine02','L_Thigh','L_Calf','L_Foot','R_Thigh','R_Calf','R_Foot',
              'L_Upperarm','L_Forearm','R_Upperarm','R_Forearm']
 guards=[[names.index(n),*rest[names.index(n),:3,3].tolist()] for n in guard_names]
-meta=json.dumps(dict(clips=clips,bones=len(joints),strands=strands,guards=guards,lengths=list(map(len,parts))),separators=(',',':')).encode()
+meta=json.dumps(dict(meshEncoding=2,clips=clips,bones=len(joints),strands=strands,guards=guards,lengths=list(map(len,parts))),separators=(',',':')).encode()
 meta+=b' '*(-len(meta)%4)
 blob=gzip.compress(struct.pack('<I',len(meta))+meta+b''.join(parts),compresslevel=6,mtime=0)
 (Path(__file__).resolve().parents[2]/'source/assets/player.bin').write_bytes(blob)
-print(count,'顶点',len(joints),'骨骼',len(blob),'压缩字节',list(clips))
+print(len(vertices),'顶点',len(joints),'骨骼',len(blob),'压缩字节',list(clips))

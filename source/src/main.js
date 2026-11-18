@@ -97,6 +97,9 @@ const shadowPipe = (m, vsE, buffers, o = {}) => device.createRenderPipeline({ la
   primitive: { topology: o.strip ? 'triangle-strip' : 'triangle-list', cullMode: o.cull || 'none' },
   depthStencil: { format: DEPTH, depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 1.5 } });
 
+// 与海底构建并行下载、解包角色，进入场景之前再等待两者就绪。
+const avatarReady=prepareAvatar();
+avatarReady.catch(()=>{}); // 提前记录拒绝，装配阶段统一交给启动错误界面。
 await say('正在编译着色器…', 0.05, 300);
 const mSolid = mod(W_SOLID), mLeaf = mod(W_LEAF), mAnim = mod(W_ANIM), mSurf = mod(W_SURF), mSpr = mod(W_SPR);
 const pTerrain = scenePipe(mSolid, 'vs', 'fs', [vbSolid, ibSolid], { cull: 'back' });
@@ -307,7 +310,7 @@ const ibGl = buf(Wd.glints, BU.VERTEX), nGl = Wd.glints.length / 8;
 const nManta = Wd.mantas.length / 8, nBub = Wd.bubbles.length / 8, nSnow = Wd.snow.length / 4;
 const MANTA = meshes[12];
 await say('正在装配角色骨架与水下动作…', .97, 800);
-const drawAvatar = await prepareAvatar();
+const drawAvatar = await avatarReady;
 Q.writeTexture({ texture: tVol }, Wd.volD, { bytesPerRow: NX, rowsPerImage: NY / 2 }, [NX / 2, NY / 2, NZ / 2]);
 Q.writeTexture({ texture: tMap }, Wd.gm, { bytesPerRow: 2048 }, [512, 512]);
 
