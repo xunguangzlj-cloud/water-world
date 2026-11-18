@@ -49,7 +49,7 @@ if (!readable) {
   const embedded = 'type=application/octet-stream>AVATAR_PAYLOAD</script>';
   if (!html.includes(embedded)) throw Error('找不到角色资源入口');
   writeFileSync(path.join(docs, 'player.bin'), player);
-  writeFileSync(path.join(docs, 'index.html'), html.replace(embedded, `type=application/octet-stream data-src="player.bin?v=${version}"></script>`));
+  writeFileSync(path.join(docs, 'index.html'), html.replace('<head>', '<head><link rel=icon href="data:,">').replace(embedded, `type=application/octet-stream data-src="player.bin?v=${version}"></script>`));
 }
 html = html.replace('AVATAR_PAYLOAD', () => player.toString('base64'));
 writeFileSync(path.join(here, '..', out), html);
