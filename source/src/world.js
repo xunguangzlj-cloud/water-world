@@ -30,6 +30,7 @@ const HOLES = [
 ];
 // regions kept free of random mesas: ax, az, bx, bz, radius, softness
 const CLEARS = [
+  [-56, 43, -92, 60, 11, 7], [-92, 60, -111, 33, 16, 6], [-111, 33, -116, -5, 15, 7],
   [0, -45, 0, 35, 22, 10], [0, -86, 0, -86, 46, 12], [42, 24, 74, 6, 22, 10], [72, -26, 72, -26, 26, 10],
   [-60, -36, -60, 36, 13, 8], [-60, 42, -18, 46, 12, 8], [4, 58, 8, 100, 24, 10], [-34, -74, -56, -46, 11, 8],
 ];
@@ -155,6 +156,7 @@ function makeWorld(D, T, flyPts, POSES) {
   const KELPZ = [[-32, -5, 13, 0.85], [0, -86, 46, 1], [72, -26, 27, 0.9], [-60, -4, 11, 0.8], [0, -36, 12, 0.55], [-17, -8, 6, 0.8], [15, -8, 6, 0.8], [-4, 120, 20, 0.4], [-45, -63, 15, 0.9], [62, -26, 12, 0.9], [-100, 70, 30, 0.8], [100, 60, 30, 0.8], [-95, -90, 32, 0.8], [105, -85, 30, 0.7]];
   const NOKELP = [[-5, -106.5, 8], [4.6, -109.4, 10], [14.2, -112.3, 12], [-26, -100, 6], [-20.5, -101.7, 4.5], [-14.8, -104.5, 6], [-7.5, -107.8, 7], [4, 112, 11], [2, 4, 15], [42, 22, 12], [6, 78, 19], [-58, -16, 8], [9, -66, 9], [8, -76, 8]];
   const kelpDens = (x, z) => {
+    if (hypot(x + 92, z - 60) < 19 || hypot(x + 111, z - 33) < 17 || hypot(x + 116, z + 5) < 17) return 0;
     for (const p of NOKELP) if (hypot(x - p[0], z - p[1]) < p[2]) return 0;
     let d = sstep(0.52, 0.64, fbm(x * 0.022, 4, z * 0.022, 3)) * 0.5;
     for (const p of KELPZ) d = max(d, p[3] * sstep(p[2], p[2] * 0.75, hypot(x - p[0], z - p[1])));
@@ -312,6 +314,31 @@ function makeWorld(D, T, flyPts, POSES) {
   for (let i = 0; i < 9; i++) { const a = rnd() * TAU; const x = -5 + cos(a) * rr(1.2, 2.6), z = -4 + sin(a) * rr(1.5, 4); solid(6, x, gy(x, z) + 0.05, z, rr(0.4, 0.9), qAxis(0, 1, 0, rnd() * 6), 4, rnd(), 1, 0); }
 
   // --- bubbles
+  for (let k=0;k<42;k++) bubbles.push(4.8,-38.4,3.2,rr(.035,.075),k/42,rr(.7,1.15),-1,rnd());
+  rseed(48);
+  const upright = [0, 0, 0, 1];
+  solid(30, 53, gy(53, 23) - .2, 23, 1, upright, 9, .3);
+  const ruinY = gy(-92, 60);
+  solid(26, -92, ruinY - 0.15, 60, 1, upright, 6, 0, 1);
+  for (let i = 0; i < 12; i++) {
+    const angle = i * TAU / 12;
+    const x = -92 + 11 * cos(angle), z = 60 + 11 * sin(angle);
+    if (i === 0 || i === 1) continue;
+    solid(27, x, gy(x, z) - 0.3, z, i % 4 === 0 ? 0.55 : 1, qAxis(0, 0, 1, rr(-0.08, 0.08)), 2, rnd());
+  }
+  for (let i = 0; i < 32; i++) {
+    const angle = i * 2.4, r = 12 * sqrt(i / 32);
+    const x = -111 + cos(angle) * r, z = 33 + sin(angle) * r;
+    const y = -31 + sin(angle * 1.4) * 5 + rr(-2, 2);
+    solid(28, x, y, z, i === 0 ? 1.8 : rr(0.48, 1.3), qAxis(0, 1, 0, angle), 7, rnd(), 1, rr(0.4, 1.1));
+  }
+  for (const [dx, dz, scale] of [[0, 0, 1.4], [-4, -2, 0.92], [4, -3, 0.8], [-2, 4, 0.62], [7, 2, 0.55], [-8, -6, 0.75], [3, -9, 1.05]]) {
+    const x = -116 + dx, z = -5 + dz, base = gy(x, z) - 0.2;
+    solid(29, x, base, z, scale, qAxis(0, 1, 0, rnd() * TAU), 8, rnd());
+    for (let k = 0; k < 56; k++) {
+      bubbles.push(x, base + 6.4 * scale, z, -rr(0.7, 1.25) * scale, k / 56, rr(1.4, 2.1), 10 * scale, rr(0.2, 0.55));
+    }
+  }
   const VENTS = [[4, -44, -3], [4.5, -44, -3.5], [-1, -44, 2], [2, -44, -1], [5.5, -44, -7], [3, -44, -9], [6, -44, -90], [8, -44, -84], [4, -44, -93], [-9, -44, 3], [5, -35, -86], [9, -37, -92], [40, -44, 20], [-56, -44, 12], [10, -44, 80], [-2, -44, 30], [0, -44, -30], [12, -44, 2], [6, -44, -2], [46, -44, 30], [-20, -44, -103], [-52, -44, -12], [4, -44, 70], [9, -44, -74], [4, -44, -78], [14, -44, 26], [26, -44, 40], [-45, -44, -64], [-55, -44, -40], [-58, -44, 22], [-40, -44, 40], [-14, -44, 45], [-1, -44, -9], [-7, -44, -6]];
   rseed(13);
   for (const s of spots) if (rnd() < 0.28) VENTS.push(s);
@@ -364,11 +391,6 @@ function makeWorld(D, T, flyPts, POSES) {
   }
 
   // --- fish schools + mantas
-  const fish = [];
-  rseed(14);
-  const SCH = [[-2, -36, -10, 15, 520, 0.3, 1, 0.945], [8, -30, -70, 22, 420, 0.32, -1], [48, -30, 14, 18, 360, 0.3, 1], [-58, -30, -8, 11, 420, 0.28, -1, 0.3], [8, -36, 84, 16, 320, 0.28, 1],
-    [-90, -28, -70, 25, 300, 0.3, 1], [95, -30, 70, 25, 300, 0.3, -1], [0, -22, 20, 30, 380, 0.34, -1], [-30, -30, -100, 18, 300, 0.3, 1], [16, -36, 30, 12, 300, 0.3, 1], [-48, -34, -58, 12, 300, 0.3, -1], [-45, -35, 38, 14, 320, 0.3, 1]];
-  for (const s of SCH) { const ss = s[7] === undefined ? rnd() : s[7]; for (let i = 0; i < s[4]; i++) fish.push(s[0], s[1], s[2], s[3], rnd(), s[6] * 1.9 / s[3], s[5], ss); }
   const mantas = [];
   for (const m of [[1, -28, 3.5, 14, 3.012, 0.085, 3.6, 0.1], [49, -31, 24.5, 5, 0.029, -0.08, 3.7, 0.4], [0, -14, -80, 34, 0.3, 0.06, 5.2, 0.7], [-50, -18, 20, 26, 5, -0.075, 3.8, 0.55], [10, -16, 86, 26, 2.2, 0.07, 4.4, 0.85], [20, -11, -20, 46, 4.2, -0.045, 5.6, 0.25]]) mantas.push(...m);
 
@@ -377,7 +399,7 @@ function makeWorld(D, T, flyPts, POSES) {
   for (let i = 0; i < snow.length; i++) snow[i] = rnd();
 
   const sol = { data: [], ranges: [] }; let si = 0;
-  for (let m = 0; m < 12; m++) { const a = solids[m] || []; sol.ranges.push([si, a.length / 12]); si += a.length / 12; for (let i = 0; i < a.length; i++) sol.data.push(a[i]); }
+  for (let m = 0; m < solids.length; m++) { const a = solids[m] || []; sol.ranges.push([si, a.length / 12]); si += a.length / 12; for (let i = 0; i < a.length; i++) sol.data.push(a[i]); }
   const packC = (L) => {
     let n = 0; const start = new Uint32Array(nCells + 1);
     for (let c = 0; c < nCells; c++) { start[c] = n; n += L[c].length / 12; }
@@ -387,7 +409,7 @@ function makeWorld(D, T, flyPts, POSES) {
     for (let c = 0; c < nCells; c++) { const a = L[c]; for (let i = 0; i < a.length; i += 12) { for (let j = 0; j < 12; j++) data[k++] = a[i + j]; lo[c] = min(lo[c], a[i + 1] - 3); hi[c] = max(hi[c], a[i + 1] + 3); } }
     return { data, n, start, lo, hi };
   };
-  return { gy, glints: new Float32Array(glints), chunks: chunks.map(packC), props: props.map(packC), big: pack(big), bigF: pack(big, 2, 1.5), small: pack(small), solids: { data: new Float32Array(sol.data), ranges: sol.ranges }, bubbles: new Float32Array(bubbles), volD, gm, fish: new Float32Array(fish), mantas: new Float32Array(mantas), snow };
+  return { gy, glints: new Float32Array(glints), chunks: chunks.map(packC), props: props.map(packC), big: pack(big), bigF: pack(big, 2, 1.5), small: pack(small), solids: { data: new Float32Array(sol.data), ranges: sol.ranges }, bubbles: new Float32Array(bubbles), volD, gm, mantas: new Float32Array(mantas), snow };
 }
 const fract = (x) => x - floor(x);
 
@@ -546,12 +568,208 @@ function meshManta() {
   }
   return m;
 }
-function meshFish() {
-  const m = new Mesh();
-  const X = [0.5, 0.3, 0.05, -0.22, -0.34], H = [0.01, 0.13, 0.17, 0.09, 0.035], Wd = [0.01, 0.05, 0.065, 0.03, 0.012], rings = [];
-  for (let i = 0; i < 5; i++) { const r = []; for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; r.push(m.v(X[i], sin(a) * H[i], cos(a) * Wd[i])); } rings.push(r); }
-  for (let i = 0; i < 4; i++) for (let k = 0; k < 6; k++) { const k2 = (k + 1) % 6; m.quad(rings[i][k], rings[i + 1][k], rings[i + 1][k2], rings[i][k2]); }
-  const a = m.v(-0.33, 0, 0), b = m.v(-0.56, 0.2, 0), c = m.v(-0.47, 0, 0), d = m.v(-0.56, -0.2, 0);
-  m.tri(a, b, c); m.tri(a, c, d);
+// 石座上装有三层刻度环；每个环绕不同的轴倾斜。
+function meshTideDial() {
+  const m = meshLathe([[3.8, -0.6, 0.4], [3.8, 0.5, 0.6], [3.3, 0.7, 0.9], [3, 1.1, 1], [1.5, 1.5, 1], [0.7, 2.1, 1]], 64, 0.03);
+  const cy = 6.8;
+  for (const [r, yaw, tilt] of [[5.4, 0.95, 0.03], [4.85, -0.15, 0.45], [4.15, 1.4, 1.12]]) {
+    const ringPoint = (angle, radius) => {
+      const x = cos(angle) * radius, y = sin(angle) * radius;
+      return [x * cos(yaw) - y * sin(tilt) * sin(yaw), cy + y * cos(tilt), x * sin(yaw) + y * sin(tilt) * cos(yaw)];
+    };
+    const path = Array.from({length: 97}, (_, k) => ringPoint(TAU * k / 96, r));
+    m.tube(path, r * 0.046, 10, false);
+    for (let k = 0; k < 36; k++) {
+      const a = TAU * k / 36;
+      m.tube([ringPoint(a, r), ringPoint(a, r - (k % 3 ? 0.32 : 0.68))], k % 3 ? 0.05 : 0.09, 6);
+    }
+  }
+  m.tube([[0, 1.2, 0], [0, 4, 0], [0, cy, 0]], k => [0.6, 0.19, 0.12][k], 12);
+  m.tube([[0, cy - 1.2, 0], [0, cy, 0], [0, cy + 1.2, 0]], k => k === 1 ? 0.95 : 0.02, 8);
+  return m;
+}
+
+function meshRuinPillar() {
+  return meshLathe([[1.3, -0.5, 0.4], [1.3, 0.5, 0.65], [1, 0.6, 0.8], [1, 0.9, 0.9], [0.75, 1.1, 1], [0.65, 5.6, 1], [0.92, 5.8, 1], [1.08, 6.2, 0.8], [0, 6.25, 0.9]], 48, 0.08, 12);
+}
+
+function meshMedusa() {
+  const m = new Mesh(), rings = [];
+  for (let j = 0; j <= 18; j++) {
+    const t = j / 18, ring = [];
+    for (let i = 0; i < 72; i++) {
+      const a = i * TAU / 72;
+      const r = max(0.006, 1.45 * sin(t * 2.13)) * (1 + 0.035 * cos(12 * a));
+      ring.push(m.v(r * cos(a), 1.28 * cos(t * 2.13) + t ** 4 * 0.12 * cos(12 * a), r * sin(a), t));
+    }
+    rings.push(ring);
+    if (j) for (let i = 0; i < 72; i++) {
+      const n = (i + 1) % 72;
+      m.quad(ring[i], rings[j - 1][i], rings[j - 1][n], ring[n]);
+    }
+  }
+  for (let i = 0; i < 18; i++) {
+    const a = i * TAU / 18, arm = i % 3 === 0, len = arm ? 2.2 : 3.5 + sin(i * 7);
+    const pts = Array.from({length: 19}, (_, k) => {
+      const t = k / 18, r = arm ? 0.45 : 1.23;
+      return [r * cos(a) + t * 0.33 * sin(t * 7 + a), -0.55 - t * len, r * sin(a) + t * 0.26 * cos(t * 8 + a)];
+    });
+    m.tube(pts, k => (arm ? 0.15 + 0.045 * sin(k) : 0.032) * (1 - k / 20), 6);
+  }
+  return m;
+}
+
+function meshVent() {
+  return meshLathe([[1.9, -0.6, 0.5], [1.8, 0.8, 0.8], [1.3, 1.7, 0.8], [1.36, 2.2, 0.7], [1.05, 2.7, 1], [1.15, 3.6, 0.8], [0.85, 4.1, 1], [0.73, 5.4, 0.8], [0.48, 6.3, 1], [0.51, 6.5, 1], [0.27, 6.44, 0.4], [0.15, 5.8, 0]], 32, 0.55, 7);
+}
+
+// 横截面从尾柄到吻端，分别控制背线、腹线及横向厚度。
+function populateReefFish(){
+  const fish = [];
+  rseed(14);
+  // 每处栖息地是一对鱼或一个松散的小群，预先检查整圈水路和两侧余量。
+  const habitats=[
+    [[-8,-26,4,12,9],[20,-13,-75,13,11],[44,-17,31,11,8],[-66,-26,-9,12,9],
+      [11,-22,82,13,10],[-89,-18,-71,15,10],[92,-20,67,14,11],[1,-12,27,14,9],
+      [-26,-21,-104,12,11],[22,-29,43,12,8],[-54,-23,-58,13,9],[-41,-26,42,14,10],
+      [-91,-21,55,12,8],[-109,-20,-9,13,9],[37,-12,-45,12,10],[69,-22,-27,14,11]],
+    [[5,-39,4,3.6,3],[-56,-37,-10,4,3],[4,-36,67,4,2],[-106,-32,40,4,3],[16,-31,-64,4,3]],
+    [[-2,-35,-5,5.6,2],[-84,-34,58,6,3],[-61,-27,-2,5.5,2],[45,-28,33,6,2],[13,-29,80,6,3]],
+    [[7,-36,1,5.8,4],[1,-30,78,7,4],[-106,-30,33,7,3],[-67,-25,-18,6,4],[-78,-30,65,6,3],[18,-35,-72,6,3]],
+    [[43,-27,30,8.8,3],[2,-26,-80,10,3],[35,-18,48,10,2],[-94,-25,53,9,2],[-115,-25,1,10,3]]
+  ];
+  const fishBatches=[];
+  for(let kind=0;kind<habitats.length;kind++){
+    const first=fish.length/8;
+    for(const [baseX,initialY,baseZ,r,count] of habitats[kind]){
+      let route;
+      for(let lift=0;lift<=24 && !route;lift+=2){
+        const y=initialY+lift;
+        if(y>-3)break;
+        for(const [dx,dz] of [[0,0],[4,2],[-4,-2],[2,-5],[-3,5],[8,-3],[-8,3]]){
+          const x=baseX+dx,z=baseZ+dz,yaw=x*.056+z*.041,cy=cos(yaw),sy=sin(yaw);
+          let clear=true;
+          for(let k=0;k<48 && clear;k++){
+            const a=k*TAU/48,px=r*cos(a),pz=r*(.68*sin(a)+.12*sin(2*a+.6));
+            const wx=x+cy*px-sy*pz,wz=z+sy*px+cy*pz;
+            for(const dy of [0,-1.1,1.1])if(solidDensity(wx,y+dy,wz)>-.90){clear=false;break;}
+          }
+          if(clear){route=[x,y,z];break;}
+        }
+      }
+      if(!route)continue;
+      const [x,y,z]=route;
+      const direction=rnd()<.5?-1:1, rate=direction*[1.8,.66,.79,1.08,1.46][kind]/r;
+      const phase=rnd();
+      for(let k=0;k<count;k++)fish.push(x,y,z,r,kind+.02+.95*rnd(),rate,
+        [ .55,1.14,1.32,1.35,1.62 ][kind]*rr(.90,1.10),(phase+(k+rr(-.09,.09))/count)%1);
+    }
+    fishBatches.push([first,fish.length/8-first]);
+  }
+  return {fish:new Float32Array(fish),fishBatches};
+}
+
+function meshReefFish(kind) {
+  const m=new Mesh();
+  const [len,high,wide] = [[1,.145,.092],[1,.245,.145],[1,.35,.109],[1.08,.275,.127],[1.52,.112,.092]][kind];
+  const heights=[
+    [.12,.21,.52,.84,1,.98,.80,.53,.22,.035],
+    [.18,.34,.72,.96,1,.95,.83,.66,.40,.07],
+    [.12,.38,.86,1,.99,.92,.71,.43,.20,.07],
+    [.14,.37,.77,.96,1,.98,.86,.63,.32,.06],
+    [.18,.34,.65,.89,1,.97,.80,.54,.29,.08]
+  ][kind];
+  const xs=[-.45,-.37,-.26,-.12,.03,.16,.28,.38,.47,.54];
+  const lower=kind===2?[.16,.42,.83,.99,1,.90,.72,.47,.20,.07]:
+    kind===4?[.18,.38,.72,.86,.92,.91,.83,.70,.48,.10]:heights;
+  const thickness=[.13,.26,.54,.80,.99,1,.91,.68,.42,.09];
+  const cy=kind===2?[0,0,.006,.006,0,-.007,-.035,-.053,-.059,-.064]:
+    kind===4?[0,0,.003,.004,0,0,-.006,-.015,-.019,-.022]:[0,0,0,.003,.004,.004,0,-.006,-.016,-.023];
+  function at(values,x){
+    let i=0;
+    while(i<xs.length-2 && x>xs[i+1])i++;
+    const span=xs[i+1]-xs[i],u=clamp((x-xs[i])/span,0,1),a=max(0,i-1),b=min(i+2,xs.length-1);
+    const d0=(values[i+1]-values[a])/(xs[i+1]-xs[a])*span;
+    const d1=(values[b]-values[i])/(xs[b]-xs[i])*span;
+    return mix(values[i],values[i+1],u*u*(3-2*u))+u*(1-u)*((1-u)*d0-u*d1);
+  }
+  const seg=kind===0?16:30, slices=kind===0?15:30;
+  let prev=[];
+  for(let j=0;j<=slices;j++){
+    const x=mix(xs.at(-1),xs[0],j/slices),ring=[];
+    for(let k=0;k<seg;k++){
+      const a=TAU*k/seg,h=cos(a),r=h>0?heights:lower;
+      ring.push(m.v(x*len,at(cy,x)+h*high*at(r,x),sin(a)*wide*at(thickness,x),0));
+    }
+    if(j)for(let k=0;k<seg;k++){const n=(k+1)%seg;m.quad(prev[k],ring[k],ring[n],prev[n]);}
+    if(!j||j===slices){
+      const cap=m.v((x+(j?-.006:.006))*len,at(cy,x),0,0);
+      for(let k=0;k<seg;k++){const n=(k+1)%seg;j?m.tri(cap,ring[n],ring[k]):m.tri(cap,ring[k],ring[n]);}
+    }
+    prev=ring;
+  }
+  // 鳍膜由多条弯曲鳍条撑开，辅助通道同时记录鳍的种类和扇形坐标。
+  function fan(part,rays,point){
+    let last=[];
+    for(let i=0;i<=rays;i++){
+      const u=i/rays,row=[];
+      for(let k=0;k<=4;k++){
+        const t=k/4,p=point(u,t);
+        row.push(m.v(p[0]*len,p[1],p[2],(part*24+u*20)/127));
+      }
+      if(i)for(let k=0;k<4;k++)m.quad(last[k],row[k],row[k+1],last[k+1]);
+      last=row;
+    }
+  }
+  const fork=[.17,.025,.045,.06,.19][kind],tailH=[.18,.20,.245,.215,.235][kind];
+  fan(1,22,(u,t)=>{
+    const q=2*u-1, a=abs(q),x=kind===1?-.73+.13*a*a:-.68+fork*(1-a**1.4)+.048*a**7;
+    return [mix(-.425,x,t),q*mix(high*.12,tailH,t),.012*sin(PI*u)*sin(PI*t)];
+  });
+  function medianFin(sign,start,end,crest){
+    fan(2,24,(u,t)=>{
+      const x=mix(start,end,u),height=high*at(sign>0?heights:lower,x);
+      const extension=crest(u);
+      return [x-t*(.064*sin(PI*u)+(kind===2&&sign>0?.54*extension:0)),at(cy,x)+sign*(height*.92+t*extension),.007*sin(PI*u)*sin(PI*t)];
+    });
+  }
+  const arch=u=>pow(max(0,sin(PI*u)),.65);
+  if(kind===4){
+    medianFin(1,.09,-.09,u=>.111*arch(u)*(1.45-u));
+    medianFin(1,-.22,-.39,u=>.087*arch(u));
+  }else{
+    medianFin(1,.28,-.37,u=>arch(u)*([.065,.082,.088,.086][kind])*(1+.12*cos(40*u))+
+      (kind===2?.37*exp(-((u-.30)**2)/.011)*arch(u):0));
+  }
+  medianFin(-1,-.07,-.37,u=>arch(u)*[.045,.069,.107,.084,.077][kind]);
+  for(const side of [-1,1]){
+    fan(3,15,(u,t)=>[.18-.02*u-t*(.16+.10*sin(PI*u)),high*(.01-.25*u)-t*(.02+.105*u),
+      side*(wide*.92+t*(.10+.07*sin(PI*u)))]);
+    fan(2,8,(u,t)=>[.09-.04*u-t*(.08+.045*u),-high*.78-t*.085*sin(PI*u),side*wide*(.42+.24*t)]);
+    const ex=kind===4?.37:.33, ey=at(cy,ex)+high*(kind===2?.27:.32);
+    const ez=wide*at(thickness,ex)*.92,rad=(kind===4?.031:kind===0?.029:.042);
+    // 微凸角膜、虹膜和瞳孔用同心曲面成形，左右眼分别嵌在头部两侧。
+    let last=[];
+    for(const [r,depth,tag] of [[1.12,-.003,99],[1,.003,100],[.76,.012,104],[.55,.018,108],[.43,.022,113],[.015,.026,114]]){
+      const row=[];
+      for(let i=0;i<20;i++){
+        const a=i*TAU/20;
+        row.push(m.v(ex*len+r*rad*cos(a),ey+r*rad*sin(a),side*(ez+depth-.23*r*rad*cos(a)),tag/127));
+      }
+      if(last.length)for(let i=0;i<20;i++){
+        const n=(i+1)%20;side===1?m.quad(last[i],last[n],row[n],row[i]):m.quad(last[i],row[i],row[n],last[n]);
+      }
+      last=row;
+    }
+  }
+  return m;
+}
+
+function meshWreckBell() {
+  const m=meshLathe([[0,2.95,.4],[.9,2.95,.9],[.84,3.13,1],[.7,3.2,1],[.57,3.65,1],[.5,4.12,1],[.3,4.32,.9],[.12,4.36,1]],32,.015);
+  m.tube([[0,2.78,0],[0,2.95,0],[0,3.2,0]],k=>k===1?.15:.065,12);
+  for(const x of [-1.55,1.55]) m.tube([[x,-.3,0],[x,4.85,0]],.13,10);
+  m.tube([[-1.7,4.8,0],[1.7,4.8,0]],.14,10);
+  m.tube([[0,4.32,0],[0,4.8,0]],.075,8);
   return m;
 }

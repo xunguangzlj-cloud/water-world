@@ -3,8 +3,10 @@
 // ============================================================================
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), info = $('i'), body = document.body;
-// a phone held upright gets the page turned on its side (see template.html)
-const rot = matchMedia('(orientation:portrait) and (pointer:coarse)');
+let handheld = mob || (navigator.maxTouchPoints > 0 && matchMedia('(max-width:900px)').matches);
+try { const saved = localStorage.getItem('abyssalTouch'); if (saved !== null) handheld = saved === '1'; } catch {}
+document.documentElement.classList.toggle('handheld', handheld);
+$('handMode').checked = handheld;
 // loading bar: each stage glides it to `to` (the share done) over ~`ms` on the compositor, so it moves while this
 // thread is busy
 let loaded = 0, dead; // dead: the graphics device was lost
@@ -16,9 +18,9 @@ const say = (m, to, ms) => {
   return new Promise((r) => { a.ready.then(() => setTimeout(r)); setTimeout(r, document.hidden ? 0 : 1e3); });
 };
 const fail = (m) => { throw new Error(m, { cause: 1 }); }; // cause marks a message that is shown as it is
-if (!navigator.gpu) fail('This scene needs WebGPU. Try a current Chrome or Edge.');
+if (!navigator.gpu) fail('此场景需要 WebGPU，请用新版 Chrome 或 Edge 打开。');
 const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-if (!adapter) fail('No WebGPU adapter found.');
+if (!adapter) fail('未找到可用的 WebGPU 显卡。请启用浏览器的图形加速，然后重新打开页面。');
 $('w').hidden = !!navigator.userAgentData; // only Chromium-based browsers have it
 const hasTS = adapter.features.has('timestamp-query');
 const device = await adapter.requestDevice({ requiredFeatures: hasTS ? ['timestamp-query'] : [] });
@@ -27,7 +29,7 @@ device.addEventListener('uncapturederror', (e) => console.error('GPU: ' + e.erro
 device.lost.then((l) => {
   if (l.reason === 'destroyed') return; // the page is closing
   if (LV < 2) { keep('abyssal', LV + 1); location.reload(); }
-  dead = body.className = 'l e'; $('s').textContent = 'The graphics device was lost. Reload the page to try again.';
+  dead = body.className = 'l e'; $('s').textContent = '显卡连接已中断，请刷新页面重试。';
 });
 const ctx = canvas.getContext('webgpu'), FMT = navigator.gpu.getPreferredCanvasFormat();
 const Q = device.queue, HDR = 'rgba16float', DEPTH = 'depth32float';
@@ -48,8 +50,9 @@ const tDetail = tex(1024, 1024, 'rgba8unorm', TU.RENDER_ATTACHMENT | TU.TEXTURE_
 const tVol = tex(NX / 2, NY / 2, 'rg8unorm', TU.TEXTURE_BINDING | TU.COPY_DST, { d: NZ / 2 });
 const tMap = tex(512, 512, 'rgba8unorm', TU.TEXTURE_BINDING | TU.COPY_DST);
 
-const UB = new Float32Array(60), UBS = new Float32Array(60);
-const ubo = device.createBuffer({ size: 240, usage: BU.UNIFORM | BU.COPY_DST }), uboS = device.createBuffer({ size: 240, usage: BU.UNIFORM | BU.COPY_DST });
+const UB = new Float32Array(64), UBS = new Float32Array(64);
+const ubo = device.createBuffer({ size: UB.byteLength, usage: BU.UNIFORM | BU.COPY_DST }), uboS = device.createBuffer({ size: UBS.byteLength, usage: BU.UNIFORM | BU.COPY_DST });
+UBS.fill(60,60);
 const WT = new Float32Array(4), uboW = device.createBuffer({ size: 16, usage: BU.UNIFORM | BU.COPY_DST });
 
 const VF = SS.VERTEX | SS.FRAGMENT;
@@ -94,7 +97,7 @@ const shadowPipe = (m, vsE, buffers, o = {}) => device.createRenderPipeline({ la
   primitive: { topology: o.strip ? 'triangle-strip' : 'triangle-list', cullMode: o.cull || 'none' },
   depthStencil: { format: DEPTH, depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 1.5 } });
 
-await say('Compiling shaders…', 0.05, 300);
+await say('正在编译着色器…', 0.05, 300);
 const mSolid = mod(W_SOLID), mLeaf = mod(W_LEAF), mAnim = mod(W_ANIM), mSurf = mod(W_SURF), mSpr = mod(W_SPR);
 const pTerrain = scenePipe(mSolid, 'vs', 'fs', [vbSolid, ibSolid], { cull: 'back' });
 const pSolid = scenePipe(mSolid, 'vs', 'fs', [vbSolid, ibSolid]);
@@ -141,7 +144,7 @@ const SUN = (() => { const v = [0.27, 1, -0.24], l = hypot(...v); return v.map((
 }
 
 // ---------------------------------------------------------------- world generation
-await say('Sculpting the seabed…', 0.25, 1200);
+await say('正在塑造海床…', 0.25, 1200);
 // marks a load in progress (quality.js); leaving the page before it ends is not a crash
 keep('abyssalLoad', 1);
 addEventListener('pagehide', () => keep('abyssalLoad', ''));
@@ -190,7 +193,7 @@ let CG = new Int8Array(64 * 65534);
   }
   CG = CG.slice(0, n * 64);
 }
-await say('Carving canyons…', 0.32, 400);
+await say('正在雕刻海底峡谷…', 0.32, 400);
 const T = buildTerrain(D);
 
 // preset viewpoints (position, look-at), keys 1-6; the world generator dresses the scene around them
@@ -201,6 +204,9 @@ const POSES = [
   [-55, 1.5, -18, -60, -30, 8],
   [10, 1.2, -62, 6, -22, -90],
   [3, 1.6, 62, 1, -28, 100],
+  [-73, 7, 67, -92, -39, 60],
+  [-98, 12, 44, -111, -31, 33],
+  [-102, 8.2, 8, -116, -39, -5],
 ];
 // 60 s camera path (position + look-at, Catmull-Rom): the world generator keeps it clear, dev.js flies along it
 const FLY = new Float32Array([
@@ -266,12 +272,12 @@ function flyAt() {
 for (let t = 0; t <= FLYT; t += 0.1) { F[FLT] = t; flyAt(); flyPts.push([F[CX], F[CY], F[CZ]]); }
 for (const p of POSES) flyPts.push([p[0], -40, p[2]]);
 
-await say('Growing kelp…', 0.73, 2500);
+await say('正在生成海藻森林…', 0.73, 2500);
 const Wd = makeWorld(D, T, flyPts, POSES);
 for (const p of POSES) p[1] += Wd.gy(p[0], p[2]);
 D = Wd.gy = T.smp = null; // with gy goes the generator's working memory (about 200 MB)
 
-await say('Building set pieces…', 0.94, 1200);
+await say('正在生成鲸尾石雕与沉船…', 0.94, 1200);
 // mesh ids: 0-3 boulders, 4-6 sponges, 7-8 coral, 9 tube sponge, 10 whale fluke, 11 ship, 12 manta, 13 fish,
 // 14-20 rock chunks + pebbles, 21-22 coral LOD, 23-25 far LOD of the large rock chunks
 const meshes = [meshChunk(1, 3), meshChunk(7, 3), meshChunk(13, 3), meshChunk(22, 3),
@@ -279,23 +285,29 @@ const meshes = [meshChunk(1, 3), meshChunk(7, 3), meshChunk(13, 3), meshChunk(22
   meshLathe([[0, 0, 0.5], [0.2, 0, 0.6], [0.26, 0.5, 0.85], [0.4, 1.25, 1], [0.4, 1.42, 1], [0.33, 1.48, 0.9], [0.26, 1.38, 0.4], [0.18, 0.8, 0.12], [0, 0.5, 0.05]], 16, 0.35, 8),
   meshLathe([[0, 0, 0.5], [0.5, 0, 0.7], [0.72, 0.18, 1], [0.74, 0.38, 1], [0.62, 0.5, 0.9], [0.48, 0.42, 0.45], [0.4, 0.2, 0.15], [0, 0.14, 0.06]], 18, 0.25, 10),
   meshCoral(0), meshCoral(1), meshTubes()].map((m) => m.build());
-meshes.push(meshFluke(), meshShip().build(), meshManta().build(), meshFish().build(),
+meshes.push(meshFluke(), meshShip().build(), meshManta().build(), meshReefFish(0).build(),
   meshChunk(3).build(), meshChunk(11).build(), meshChunk(29).build(), meshChunk(5, 3).build(), meshChunk(17, 3).build(), meshChunk(41, 3).build(), meshChunk(9, 1).build(), meshCoral(0, 1).build(), meshCoral(1, 1).build(), meshChunk(5, 2, 1).build(), meshChunk(17, 2, 1).build(), meshChunk(41, 2, 1).build());
 let nV = 0, nI = 0;
+meshes.push(meshTideDial().build(), meshRuinPillar().build(), meshMedusa().build(), meshVent().build(),meshWreckBell().build());
+const fishMeshes = [meshes[13], ...[1,2,3,4].map(kind=>meshReefFish(kind).build())];
+meshes.push(...fishMeshes.slice(1));
 for (const m of meshes) { m.v0 = nV; m.i0 = nI; nV += m.nv; nI += m.ib.length; }
 const allV = new Uint8Array(nV * 16), allI = new Uint32Array(nI);
 for (const m of meshes) { allV.set(new Uint8Array(m.vb), m.v0 * 16); allI.set(m.ib, m.i0); }
 const vbMesh = buf(allV, BU.VERTEX), ibMesh = buf(allI, BU.INDEX);
 const vbTerrain = buf(new Uint8Array(T.vb), BU.VERTEX), ibTerrain = buf(T.ib, BU.INDEX);
 const nSolid = Wd.solids.data.length / 12;
+const sceneDensity=sceneSurfaces(meshes,Wd);
 const solidData = new Float32Array((nSolid + 1) * 12); solidData.set(Wd.solids.data); solidData.set([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0], nSolid * 12);
 const ibSolids = buf(solidData, BU.VERTEX);
 const ibChunk = Wd.chunks.map((c) => buf(c.data, BU.VERTEX)), ibProp = Wd.props.map((c) => buf(c.data, BU.VERTEX));
 const ibBig = buf(new Uint8Array(Wd.big.buf), BU.VERTEX), ibBigF = buf(new Uint8Array(Wd.bigF.buf), BU.VERTEX), ibSmall = buf(new Uint8Array(Wd.small.buf), BU.VERTEX);
-const ibFish = buf(Wd.fish, BU.VERTEX), ibManta = buf(Wd.mantas, BU.VERTEX), ibBubbles = buf(Wd.bubbles, BU.VERTEX), ibSnowB = buf(Wd.snow, BU.VERTEX);
+const ibManta = buf(Wd.mantas, BU.VERTEX), ibBubbles = buf(Wd.bubbles, BU.VERTEX), ibSnowB = buf(Wd.snow, BU.VERTEX);
 const ibGl = buf(Wd.glints, BU.VERTEX), nGl = Wd.glints.length / 8;
-const nFish = Wd.fish.length / 8, nManta = Wd.mantas.length / 8, nBub = Wd.bubbles.length / 8, nSnow = Wd.snow.length / 4;
-const MANTA = meshes[12], FISH = meshes[13];
+const nManta = Wd.mantas.length / 8, nBub = Wd.bubbles.length / 8, nSnow = Wd.snow.length / 4;
+const MANTA = meshes[12];
+await say('正在装配角色骨架与水下动作…', .97, 800);
+const drawAvatar = await prepareAvatar();
 Q.writeTexture({ texture: tVol }, Wd.volD, { bytesPerRow: NX, rowsPerImage: NY / 2 }, [NX / 2, NY / 2, NZ / 2]);
 Q.writeTexture({ texture: tMap }, Wd.gm, { bytesPerRow: 2048 }, [512, 512]);
 
@@ -315,7 +327,7 @@ Q.writeTexture({ texture: tMap }, Wd.gm, { bytesPerRow: 2048 }, [512, 512]);
   r.setVertexBuffer(0, vbTerrain); r.setVertexBuffer(1, ibSolids); r.setIndexBuffer(ibTerrain, 'uint32');
   r.drawIndexed(T.ib.length, 1, 0, 0, nSolid);
   r.setPipeline(pSolidSh); r.setVertexBuffer(0, vbMesh); r.setIndexBuffer(ibMesh, 'uint32');
-  for (let i = 0; i < 12; i++) { const g = Wd.solids.ranges[i]; if (g[1]) r.drawIndexed(meshes[i].ib.length, g[1], meshes[i].i0, meshes[i].v0, g[0]); }
+  for (let i = 0; i < Wd.solids.ranges.length; i++) { const g = Wd.solids.ranges[i]; if (g[1]) r.drawIndexed(meshes[i].ib.length, g[1], meshes[i].i0, meshes[i].v0, g[0]); }
   // small rocks, sponges and corals (~35M triangles) only on High: too much for a phone's driver
   if (!LV) for (let i = 0; i < NCHUNK; i++) { r.setVertexBuffer(1, ibChunk[i]); r.drawIndexed(meshes[14 + i].ib.length, Wd.chunks[i].n, meshes[14 + i].i0, meshes[14 + i].v0, 0); }
   if (!LV) for (let i = 0; i < 6; i++) if (Wd.props[i].n) { r.setVertexBuffer(1, ibProp[i]); r.drawIndexed(meshes[4 + i].ib.length, Wd.props[i].n, meshes[4 + i].i0, meshes[4 + i].v0, 0); }
@@ -389,14 +401,15 @@ if (hasTS) {
 
 // ---------------------------------------------------------------- frame
 let hud = false;
-let kf = 0, kb = 0, kl = 0, kr = 0, ku = 0, kd = 0, ks = 0, mdx = 0, mdy = 0, lkx = 0, lky = 0, l2x = 0, l2y = 0, hN = 0, hMax = 0, hMin = 1e9, hPer = 1e9, hLate = 0, hTot = 0, tId = -1, tN = 0, tx0 = 0, ty0 = 0, tx = 0, ty = 0;
+let kf = 0, kb = 0, kl = 0, kr = 0, ku = 0, kd = 0, ks = 0, mdx = 0, mdy = 0, lkx = 0, lky = 0, l2x = 0, l2y = 0, hN = 0, hMax = 0, hMin = 1e9, hPer = 1e9, hLate = 0, hTot = 0;
+let stickX = 0, stickY = 0, boost = 0, rising = 0, sinking = 0;
 const TANH = 0.6, NEAR = 0.1, EXPO = 0.62, RAYS = 0.54;
 const submitList = [null];
 const rowOrd = new Uint8Array(CELLS);
 // Draws the cells of a cell-sorted buffer that are in view and within [minD, maxD) (scaled by `det`, but not for the
 // terrain) as merged runs, nearest rows first.
 function drawCells(r, start, lo, hi, mar, indexed, verts, minD, maxD) {
-  const cx = F[CX], cy = F[CY], cz = F[CZ], fx = F[FX], fy = F[FY], fz = F[FZ], rx = F[RX], rz = F[RZ], ux = F[UX], uy = F[UY], uz = F[UZ];
+  const cx = UB[32], cy = UB[33], cz = UB[34], fx = F[FX], fy = F[FY], fz = F[FZ], rx = F[RX], rz = F[RZ], ux = F[UX], uy = F[UY], uz = F[UZ];
   const ds = indexed === 1 ? 1 : det * det;
   const tx = TANH * W / H, hw = CELLW * 0.5, ex = hw + mar, min2 = minD * minD * ds, max2 = maxD * maxD * ds;
   for (let k = 0; k < CELLS; k++) {
@@ -424,9 +437,19 @@ function drawCells(r, start, lo, hi, mar, indexed, verts, minD, maxD) {
 }
 function render() {
   // camera basis (right vector is horizontal)
-  const cx = F[CX], cy = F[CY], cz = F[CZ], pitch = F[PIT], yaw = F[YAW];
+  let cx = F[CX], cy = F[CY], cz = F[CZ];
+  const pitch = F[PIT], yaw = F[YAW];
   const cp = cos(pitch), fy = sin(pitch), rx = cos(yaw), rz = sin(yaw), fx = cp * rz, fz = -cp * rx;
   const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
+  let back = 0;
+  if (thirdPerson && !menu) {
+    // 从人物向后试探；贴近岩壁或海面时自动收近镜头。
+    for (let k=1;k<=20;k++) {
+      const d=k*.17, x=F[CX]-fx*d, y=F[CY]-fy*d+.12*d, z=F[CZ]-fz*d;
+      if(y>-.35 || y < -52 || solidDensity(x,y,z)>-.42) break;
+      cx=x; cy=y; cz=z; back=d;
+    }
+  }
   F[FX] = fx; F[FY] = fy; F[FZ] = fz; F[RX] = rx; F[RZ] = rz; F[UX] = ux; F[UY] = uy; F[UZ] = uz;
   const asp = W / H, sx = 1 / (TANH * asp), sy = 1 / TANH, m = UB;
   m[0] = rx * sx; m[4] = 0; m[8] = rz * sx; m[12] = -(rx * cx + rz * cz) * sx;
@@ -440,7 +463,8 @@ function render() {
   const zx = cx - PURPLE[0], zz = cz - PURPLE[1]; let zt = (44 - sqrt(zx * zx + zz * zz)) / 18; zt = zt < 0 ? 0 : zt > 1 ? 1 : zt;
   m[51] = zt * zt * (3 - 2 * zt);
   let ek = (-cy - 8) / 26; ek = ek < 0 ? 0 : ek > 1 ? 1 : ek;
-  m[56] = EXPO * (0.6 + 0.4 * ek); m[57] = RAYS; m[58] = det;
+  m[56] = EXPO * (0.6 + 0.4 * ek); m[57] = RAYS; m[58] = det; m[59]=back;
+  for (let j=0;j<actions.length;j++) UB[60+j] = min(60,F[TIME]-lastAction[j]);
   Q.writeBuffer(ubo, 0, UB);
   WT[0] = F[TIME]; Q.writeBuffer(uboW, 0, WT);
 
@@ -459,7 +483,7 @@ function render() {
   r.setPipeline(pTerrain); r.setVertexBuffer(0, vbTerrain); r.setVertexBuffer(1, ibSolids); r.setIndexBuffer(ibTerrain, 'uint32');
   drawCells(r, T.start, T.lo, T.hi, 1.5, 1, 0, 0, 240);
   r.setPipeline(pSolid); r.setVertexBuffer(0, vbMesh); r.setIndexBuffer(ibMesh, 'uint32');
-  for (let i = 0; i < 12; i++) { const g = Wd.solids.ranges[i]; if (g[1]) r.drawIndexed(meshes[i].ib.length, g[1], meshes[i].i0, meshes[i].v0, g[0]); }
+  for (let i = 0; i < Wd.solids.ranges.length; i++) { const g = Wd.solids.ranges[i]; if (g[1]) r.drawIndexed(meshes[i].ib.length, g[1], meshes[i].i0, meshes[i].v0, g[0]); }
   for (let i = 0; i < NCHUNK; i++) {
     const c = Wd.chunks[i], big = i > 2 && i < 6; r.setVertexBuffer(1, ibChunk[i]);
     drawCells(r, c.start, c.lo, c.hi, 3, meshes[14 + i], 0, 0, i > 5 ? 30 : big ? 40 : 96);
@@ -471,7 +495,16 @@ function render() {
     if (lod) drawCells(r, Wd.props[i].start, Wd.props[i].lo, Wd.props[i].hi, 3, meshes[18 + i], 0, 6, 110);
   }
   r.setPipeline(pManta); r.setVertexBuffer(1, ibManta); r.drawIndexed(MANTA.ib.length, nManta, MANTA.i0, MANTA.v0, 0);
-  r.setPipeline(pFish); r.setVertexBuffer(1, ibFish); r.drawIndexed(FISH.ib.length, nFish, FISH.i0, FISH.v0, 0);
+  r.setPipeline(pFish); r.setVertexBuffer(1, ibFish);
+  for (let j=0;j<fishMeshes.length;j++) {
+    const mesh=fishMeshes[j], batch=Wd.fishBatches[j];
+    r.drawIndexed(mesh.ib.length,batch[1],mesh.i0,mesh.v0,batch[0]);
+  }
+  if (back > 1.42) {
+    const gestureTime=F[TIME]<gestureUntil?F[TIME]-gestureStart:-1;
+    drawAvatar(r,F[CX],F[CY],F[CZ],actorYaw,actorLean,actorBank,gestureTime>=0?gesture:swimMotion,F[TIME],gestureTime);
+    r.setIndexBuffer(ibMesh,'uint32');
+  }
   // kelp and plants: 9-row blades up close, 5 rows mid-range, a decimated set far away
   r.setPipeline(pLeaf); r.setVertexBuffer(0, ibBig); drawCells(r, Wd.big.start, Wd.big.lo, Wd.big.hi, 5, false, 18, 0, 24);
   r.setPipeline(pLeaf5); drawCells(r, Wd.big.start, Wd.big.lo, Wd.big.hi, 5, false, 10, 24, 58);
@@ -501,26 +534,56 @@ function render() {
 
 // CS[j] = distance to the rock (metres, < 0 in water) at the camera + CE[3j..3j+2]: the camera, then ±0.375 m on
 // each axis for the gradient
-const CE = new Float64Array([0, 0, 0, .375, 0, 0, -.375, 0, 0, 0, .375, 0, 0, -.375, 0, 0, 0, .375, 0, 0, -.375]), CS = new Float64Array(7);
+const CE = new Float64Array([0,0,0,.095,0,0,-.095,0,0,0,.095,0,0,-.095,0,0,0,.095,0,0,-.095]), CS = new Float64Array(7);
 const cv = (x, y, z) => { const b = CI[(x >> 2) + CN * ((y >> 2) + NY / 4 * (z >> 2))]; return b > 1 ? CG[b * 64 - 128 + (x & 3) + 4 * (y & 3) + 16 * (z & 3)] : b * 254 - 127; };
-function sd(j) {
-  const x = (F[CX] + CE[j * 3] - OX) / VS - CO, y = (F[CY] + CE[j * 3 + 1] - OY) / VS, z = (F[CZ] + CE[j * 3 + 2] - OZ) / VS - CO;
+function terrainDensity(wx,wy,wz) {
+  // 碰撞网格只裁剪水平两轴。高度沿用完整海底网格的原点。
+  const x=(wx-OX)/VS-CO, y=(wy-OY)/VS, z=(wz-OZ)/VS-CO;
   const ix = x | 0, iy = y | 0, iz = z | 0, u = x - ix, v = y - iy, a = cv(ix, iy, iz), b = cv(ix, iy + 1, iz), c = cv(ix, iy, iz + 1), d = cv(ix, iy + 1, iz + 1);
   const p = a + (cv(ix + 1, iy, iz) - a) * u, q = b + (cv(ix + 1, iy + 1, iz) - b) * u, r = c + (cv(ix + 1, iy, iz + 1) - c) * u, s = d + (cv(ix + 1, iy + 1, iz + 1) - d) * u;
-  const e = p + (q - p) * v; CS[j] = (e + (r + (s - r) * v - e) * (z - iz)) / 127;
+  const e = p + (q - p) * v; return (e + (r + (s - r) * v - e) * (z - iz)) / 127;
+}
+function solidDensity(x,y,z) {
+  const terrain=terrainDensity(x,y,z);
+  // 预留网格插值与画面三角面之间的小幅误差，只在靠岸时生效。
+  return sceneDensity(x,y,z,terrain+.13*sstep(-1,-.62,terrain));
+}
+function sd(j,x,y,z) {
+  CS[j]=solidDensity(x+CE[j*3],y+CE[j*3+1],z+CE[j*3+2]);
 }
 // Moves the camera by F[MX..MZ] in steps shorter than its radius CR (so it can't pass through thin rock), pushing it
 // back out after each step and dropping velocity into the rock, so it slides along.
-const CR = 0.5;
 function collide() {
-  const n = floor(sqrt(F[MX] * F[MX] + F[MY] * F[MY] + F[MZ] * F[MZ]) / 0.4) + 1;
+  const n = floor(hypot(F[MX],F[MY],F[MZ])/.20)+1;
+  const reach=sin(actorLean)*.53, dx=sin(actorYaw)*reach, dz=-cos(actorYaw)*reach, dy=cos(actorLean)*.53;
+  const sideX=.39*cos(actorYaw)*cos(actorBank),sideY=-.39*sin(actorBank),sideZ=.39*sin(actorYaw)*cos(actorBank);
   for (let i = 0; i < n; i++) {
+    const oldX=F[CX],oldY=F[CY],oldZ=F[CZ];
     F[CX] += F[MX] / n; F[CY] += F[MY] / n; F[CZ] += F[MZ] / n;
-    for (let k = 0; k < 2; k++) {
-      sd(0); const s = CS[0] + CR; if (s <= 0) break;
-      for (let j = 1; j < 7; j++) sd(j);
+    for (let k = 0; k < 6; k++) {
+      // 三个球沿当前泳姿覆盖头肩、腰身和脚，趴游时也检查身前和身后。
+      const x=F[CX], y=F[CY]-.46, z=F[CZ];
+      const head=solidDensity(x+dx,y+dy,z+dz)+.55;
+      const waist=solidDensity(x,y,z)+.56;
+      const foot=solidDensity(x-dx,y-dy,z-dz)+.43;
+      const eye=solidDensity(x,F[CY],z)+.33;
+      let s=max(head,waist,foot,eye);
+      const end=s===head?1:s===foot?-1:0;
+      let hitX=x+end*dx,hitY=s===eye?F[CY]:y+end*dy,hitZ=z+end*dz;
+      if(waist>-.40){
+        for(let side=-1;side<=1;side+=2){
+          const px=x+side*sideX,py=y+side*sideY,pz=z+side*sideZ;
+          const shoulder=solidDensity(px,py,pz)+.28;
+          if(shoulder>s){s=shoulder;hitX=px;hitY=py;hitZ=pz;}
+        }
+      }
+      if(s<=.003)break;
+      for(let j=1;j<7;j++) sd(j,hitX,hitY,hitZ);
       let gx = CS[1] - CS[2], gy = CS[3] - CS[4], gz = CS[5] - CS[6]; const l = sqrt(gx * gx + gy * gy + gz * gz);
-      if (l < 0.075) break; // flat: deep in rock
+      if(l<.0002 || (k===5 && s>.04)){
+        F[CX]=oldX;F[CY]=oldY;F[CZ]=oldZ;
+        break;
+      }
       gx /= l; gy /= l; gz /= l; const vn = F[VX] * gx + F[VY] * gy + F[VZ] * gz;
       F[CX] -= gx * s; F[CY] -= gy * s; F[CZ] -= gz * s;
       if (vn > 0) { F[VX] -= gx * vn; F[VY] -= gy * vn; F[VZ] -= gz * vn; }
@@ -552,30 +615,44 @@ function frame(now) {
   }
   F[TIME] += dt;
   {
-    // touch: holding the finger away from where it went down keeps turning, like a joystick
-    if (tId >= 0) {
-      const tr = 4 / (innerWidth < innerHeight ? innerWidth : innerHeight); let jx = (tx - tx0) * tr, jy = (ty - ty0) * tr;
-      jx = jx > 1 ? 1 : jx < -1 ? -1 : jx; jy = jy > 1 ? 1 : jy < -1 ? -1 : jy;
-      lkx += jx * 1.5 * dt; lky += jy * dt;
-    }
     // mouse look through two cascaded low-pass stages
     const kq = 1 - exp(-dt * 30); lkx += mdx * 0.0022; lky += mdy * 0.0022; mdx = 0; mdy = 0;
     const ax = lkx * kq, ay = lky * kq; lkx -= ax; lky -= ay; l2x += ax; l2y += ay;
     const dyw = l2x * kq, dpt = l2y * kq; l2x -= dyw; l2y -= dpt;
     const yaw = F[YAW] + dyw; let pitch = F[PIT] - dpt; pitch = pitch < -1.55 ? -1.55 : pitch > 1.55 ? 1.55 : pitch;
-    const sp = ks || tN > 1 ? 26 : 7, k = 1 - exp(-dt * 4.5), mf = tId >= 0 ? 0.7 : kf - kb, mr = kr - kl, mu = ku - kd, cp = cos(pitch), sy = sin(yaw), cw = cos(yaw);
+    const sp = ks ? 26 : 7 + 19 * boost, k = 1 - exp(-dt * 4.5);
+    const mf = clamp(kf - kb + stickY, -1, 1), mr = clamp(kr - kl + stickX, -1, 1), mu = clamp(ku - kd + rising - sinking, -1, 1);
+    const cp = cos(pitch), sy = sin(yaw), cw = cos(yaw);
     const vx = F[VX] + ((sy * cp * mf + cw * mr) * sp - F[VX]) * k, vy = F[VY] + ((sin(pitch) * mf + mu) * sp - F[VY]) * k, vz = F[VZ] + ((-cw * cp * mf + sy * mr) * sp - F[VZ]) * k;
     let x = F[CX] + vx * dt, y = F[CY] + vy * dt, z = F[CZ] + vz * dt;
     const rad = sqrt(x * x + z * z); if (rad > 150) { x *= 150 / rad; z *= 150 / rad; }
     y = y < -52 ? -52 : y > -1.2 ? -1.2 : y;
     F[YAW] = yaw; F[PIT] = pitch; F[VX] = vx; F[VY] = vy; F[VZ] = vz; F[MX] = x - F[CX]; F[MY] = y - F[CY]; F[MZ] = z - F[CZ];
+    updateSwimmer(dt,mf!==0 || mr!==0 || mu!==0);
+    let faceX=F[VX], faceZ=F[VZ];
+    if(F[TIME]<gestureUntil) {
+      const target=actions[gestureSite];
+      faceX=target[0]-F[CX]; faceZ=target[2]-F[CZ];
+    }
+    let yawStep=0;
+    if (hypot(faceX,faceZ)>.35) {
+      const turn=atan2(faceX,-faceZ)-actorYaw;
+      const arc=atan2(sin(turn),cos(turn));
+      yawStep=clamp(arc*(1-exp(-dt*7)), -dt*4.2, dt*4.2);
+      actorYaw+=yawStep;
+    }
+    const turnRate=yawStep/max(.001,dt);
+    const waterSpeed=hypot(F[VX],F[VZ]);
+    const targetBank=clamp(turnRate*.22,-.56,.56)*sstep(.35,6,waterSpeed);
+    actorBank+=(targetBank-actorBank)*(1-exp(-dt*5));
     collide();
+    updateObservation();
   }
   render();
   if (hud) {
     hN++; if (dtr > hMax) hMax = dtr; if (dtr < hMin) hMin = dtr; if (dtr > hPer * 1.5) { hLate++; hTot++; }
     F[HUDT] += dtr / 1000;
-    if (F[HUDT] > 0.5) { info.textContent = `${(hN / F[HUDT]).toFixed(0)} fps  ·  worst frame ${hMax.toFixed(1)} ms  ·  late frames ${hLate} (total ${hTot})  ·  GPU ${F[GPU].toFixed(2)} ms  ·  ${W}x${H} (${W * 100 / DW | 0}%)`; F[HUDT] = 0; hPer = hMin; hN = 0; hMax = 0; hMin = 1e9; hLate = 0; }
+    if (F[HUDT] > 0.5) { info.textContent = `${(hN / F[HUDT]).toFixed(0)} fps  ·  最长帧耗时 ${hMax.toFixed(1)} ms  ·  延迟帧 ${hLate} （累计 ${hTot}）  ·  GPU ${F[GPU].toFixed(2)} ms  ·  ${W}x${H} (${W * 100 / DW | 0}%)`; F[HUDT] = 0; hPer = hMin; hN = 0; hMax = 0; hMin = 1e9; hLate = 0; }
   }
 }
 
@@ -588,35 +665,202 @@ const key = (e, v) => {
       if (e.code === 'KeyH') { hud = !hud; hTot = 0; hPer = 1e9; info.textContent = ''; }
       else if (e.code === 'KeyM') mute();
       else if (e.code === 'Escape') ui(true);
-      else if (e.code >= 'Digit1' && e.code <= 'Digit6') lookAt(...POSES[e.code.charCodeAt(5) - 49]);
+      else if (e.code === 'KeyF' && nearby !== -1) toggleNote();
+      else if (e.code === 'KeyR') interact();
+      else if (e.code === 'KeyV') switchView();
+      else if (e.code >= 'Digit1' && e.code <= 'Digit9') visit(e.code.charCodeAt(5) - 49);
     }
   }
 };
 // behind the menu only the stats and mute keys work
 addEventListener('keydown', (e) => { if (menu && e.code !== 'KeyH' && e.code !== 'KeyM') return; sound(); key(e, 1); });
 addEventListener('keyup', (e) => key(e, 0));
-const release = () => { kf = kb = kl = kr = ku = kd = ks = 0; tId = -1; tN = 0; };
-const capture = () => { sound(); const p = canvas.requestPointerLock({ unadjustedMovement: true }); if (p && p.catch) p.catch(() => canvas.requestPointerLock()).catch(() => 0); };
-canvas.addEventListener('click', capture);
+let dragId = null, dragX = 0, dragY = 0;
+const endDrag = () => {
+  if (dragId === null) return;
+  const id = dragId;
+  dragId = null;
+  if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+};
+const controlResets = [];
+const release = () => {
+  endDrag();
+  for (const reset of controlResets) reset();
+  kf = kb = kl = kr = ku = kd = ks = 0;
+  mdx = mdy = lkx = lky = l2x = l2y = 0;
+};
+canvas.addEventListener('pointerdown', (e) => {
+  if (menu || dragId !== null || e.button !== 0 || document.pointerLockElement) return;
+  dragId = e.pointerId;
+  dragX = e.clientX;
+  dragY = e.clientY;
+  canvas.setPointerCapture(dragId);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== dragId || document.pointerLockElement) return;
+  const scale = e.pointerType === 'touch' ? 900 / min(canvas.clientWidth, canvas.clientHeight) : 1;
+  mdx += (e.clientX - dragX) * scale;
+  mdy += (e.clientY - dragY) * scale;
+  dragX = e.clientX;
+  dragY = e.clientY;
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  canvas.addEventListener(type, (e) => { if (e.pointerId === dragId) endDrag(); });
+}
+canvas.addEventListener('dblclick', async () => {
+  if (handheld || mob || menu || !canvas.requestPointerLock) return;
+  try { await canvas.requestPointerLock(); } catch { /* 内嵌页面可以继续拖动转向。 */ }
+});
 addEventListener('mousemove', (e) => { if (document.pointerLockElement === canvas) { mdx += e.movementX; mdy += e.movementY; } });
 addEventListener('blur', release);
-const touch = (e) => {
-  e.preventDefault(); sound(); tN = e.touches.length;
-  let f = null, first = false; for (let i = 0; i < tN; i++) if (e.touches[i].identifier === tId) f = e.touches[i];
-  if (!f) { tId = -1; if (tN) { f = e.touches[0]; tId = f.identifier; first = true; } }
-  if (f) {
-    // the touch axes turn with the page when it lies on its side
-    const x = rot.matches ? f.clientY : f.clientX, y = rot.matches ? -f.clientX : f.clientY, s = 1100 / min(innerWidth, innerHeight);
-    if (first) { tx0 = x; ty0 = y; } else { mdx += (x - tx) * s; mdy += (y - ty) * s; } // the view follows the finger at once
-    tx = x; ty = y;
+// 每个控件独立捕获一根手指，抬起其中一根不会打断另一根。
+function bindControl(element, update, clear, track = false) {
+  let owner = null;
+  const reset = () => {
+    if (owner === null) return;
+    const id = owner;
+    owner = null;
+    if (element.hasPointerCapture(id)) element.releasePointerCapture(id);
+    element.classList.remove('held');
+    clear();
+  };
+  controlResets.push(reset);
+  element.addEventListener('pointerdown', e => {
+    if (!handheld || menu || owner !== null || e.button !== 0) return;
+    e.preventDefault();
+    owner = e.pointerId;
+    element.setPointerCapture(owner);
+    element.classList.add('held');
+    update(e);
+  });
+  if (track) element.addEventListener('pointermove', e => { if (e.pointerId === owner) update(e); });
+  for (const type of ['pointerup','pointercancel','lostpointercapture']) {
+    element.addEventListener(type, e => { if (e.pointerId === owner) reset(); });
   }
+}
+const stick = $('stick'), knob = stick.firstElementChild;
+bindControl(stick, e => {
+  const rect = stick.getBoundingClientRect(), radius = rect.width * .37;
+  const x = (e.clientX - rect.left - rect.width / 2) / radius;
+  const y = (e.clientY - rect.top - rect.height / 2) / radius;
+  const distance = hypot(x,y), gain = clamp((distance - .12) / .88, 0, 1) / max(.001, distance);
+  stickX = x * gain; stickY = -y * gain; boost = sstep(.85, 1.12, distance);
+  knob.style.transform = 'translate(' + stickX * radius + 'px,' + -stickY * radius + 'px)';
+}, () => { stickX = stickY = boost = 0; knob.style.transform = ''; }, true);
+bindControl($('rise'), () => { rising = 1; }, () => { rising = 0; });
+bindControl($('sink'), () => { sinking = 1; }, () => { sinking = 0; });
+document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
+addEventListener('resize', release);
+$('handMode').onchange = e => {
+  release();
+  handheld = e.target.checked;
+  document.documentElement.classList.toggle('handheld', handheld);
+  keep('abyssalTouch', handheld ? '1' : '0');
 };
-for (const n of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) canvas.addEventListener(n, touch, { passive: false });
 
 // ---------------------------------------------------------------- menu
 // The scene keeps rendering (blurred by CSS) behind the menu. Esc, losing the mouse or the corner button open it.
 let menu = true;
+let thirdPerson = true, actorYaw = 0, actorLean=.16, actorBank=0, swimMotion='hover', waterEntry=0;
+let gesture='', gestureSite=-1, gestureStart=0, gestureUntil=-1;
+const gestures=['feed','bell','dial','ripple'];
+const gestureDurations=[1.4,1.15,1.65,1.55];
+function updateSwimmer(dt,propelling) {
+  const horizontal=hypot(F[VX],F[VZ]), vertical=F[VY], speed=hypot(horizontal,vertical);
+  const slope=atan2(vertical,horizontal);
+  if (speed<.55) swimMotion='hover';
+  else if (!propelling) swimMotion='glide';
+  else if (vertical>horizontal*1.25) swimMotion='surface';
+  else if (-vertical>horizontal*1.25) swimMotion='dive';
+  else swimMotion=speed>(swimMotion==='flutter'?9:11)?'flutter':'breaststroke';
+  // 用速度方向调整身体倾角，转姿时绕胸口旋转，镜头保持平稳。
+  const trim=swimMotion==='flutter'?1.36:1.15;
+  let target=mix(.16,clamp(trim-.86*slope,-.18,2.44),sstep(.45,3.5,speed));
+  if (F[TIME]<gestureUntil) target=mix(target,.29,.82);
+  actorLean+=(target-actorLean)*(1-exp(-dt*4.8));
+}
+try { thirdPerson=localStorage.getItem('abyssalThirdPerson')!=='0'; } catch {}
+const perspective=$('perspective');
+function labelView() {
+  perspective.textContent=thirdPerson?'切至第一人称':'切至第三人称';
+}
+function switchView() {
+  thirdPerson=!thirdPerson;
+  keep('abyssalThirdPerson',thirdPerson?'1':'0');
+  labelView();
+  perspective.blur();
+}
+perspective.onclick=switchView;
+labelView();
 const bDive = $('d');
+const notes = [
+  [-92, -39, 60, '潮汐星盘', '沿着缺口游进柱廊。外圈每三道短刻度就有一道长刻度，透过倾斜的铜环，可以看见正中的八棱指针。'],
+  [-111, -31, 33, '水母洄游湾', '从侧面看，伞缘向内收时伞顶会隆起，细长的触手慢半拍才跟着摆动。绕到背光面，更容易看清十二道发亮的伞肋。'],
+  [-116, -39, -5, '热液烟囱群', '顺着暗色羽流向下游，可以找到烟囱顶端的开口。最细的一股直直上升，越往上越宽，最后被横向水流带走。']
+];
+const observe = $('observe'), caption = $('note');
+const actions = [
+  [4.8,-39.2,3.2,15,9,'撒一把鱼食','小丑鱼、长鳍蝴蝶鱼和蓝倒吊正在围食'],
+  [53,-40,23,20,6,'敲响沉船铜钟','梭鱼受惊散开，钟声正渐渐消失'],
+  [-92,-39,60,24,6,'转动潮汐星盘','三层铜环正在转动'],
+  [-111,-31,33,24,9,'轻拨水流','水母正从近到远依次发亮']
+];
+const actionButton=$('action'), lastAction=actions.map(()=>-60);
+let activeSite=-1;
+function interact() {
+  if (menu || activeSite<0 || F[TIME]-lastAction[activeSite]<actions[activeSite][4]) return;
+  lastAction[activeSite]=F[TIME];
+  gestureSite=activeSite; gesture=gestures[activeSite]; gestureStart=F[TIME];
+  gestureUntil=gestureStart+gestureDurations[activeSite];
+  if(activeSite===1) ringBell();
+  refreshAction();
+}
+function refreshAction() {
+  let site=-1, nearest=Infinity;
+  for (let i=0;i<actions.length;i++) {
+    const a=actions[i], d=hypot(F[CX]-a[0],F[CY]-a[1],F[CZ]-a[2]);
+    if(d<a[3] && d<nearest) { nearest=d; site=i; }
+  }
+  if(site!==activeSite) { activeSite=site; actionButton.hidden=site<0; }
+  if(site<0) return;
+  const a=actions[site], playing=F[TIME]-lastAction[site]<a[4];
+  const label=a[playing ? 6 : 5];
+  if(actionButton.textContent!==label) { actionButton.disabled=playing; actionButton.textContent=label; }
+}
+actionButton.onclick=interact;
+let nearby = -1;
+function updateObservation() {
+  refreshAction();
+  let nearest = -1, best = 24;
+  for (let i = 0; i < notes.length; i++) {
+    const p = notes[i], d = hypot(F[CX] - p[0], F[CY] - p[1], F[CZ] - p[2]);
+    if (d < best) { nearest = i; best = d; }
+  }
+  if (nearest === nearby) return;
+  nearby = nearest;
+  observe.hidden = nearest < 0;
+  caption.hidden = true;
+  observe.setAttribute('aria-expanded', 'false');
+  if (nearest >= 0) {
+    observe.textContent = '观察 · ' + notes[nearest][3];
+    caption.textContent = notes[nearest][4];
+  }
+}
+function toggleNote() {
+  caption.hidden = !caption.hidden;
+  observe.setAttribute('aria-expanded', String(!caption.hidden));
+  observe.blur();
+}
+observe.onclick = toggleNote;
+function visit(index) {
+  release(); mdx = mdy = lkx = lky = l2x = l2y = 0;
+  F[VX] = F[VY] = F[VZ] = 0;
+  caption.hidden = true;
+  observe.setAttribute('aria-expanded', 'false');
+  lookAt(...POSES[index]);
+  actorYaw=F[YAW]; actorLean=.16; actorBank=0; waterEntry++; swimMotion='hover'; gestureUntil=-1;
+  updateObservation();
+}
 const ui = (m) => {
   if (dead) return;
   menu = m; body.className = m ? 'm' : document.pointerLockElement ? 'g p' : 'g';
@@ -624,19 +868,26 @@ const ui = (m) => {
   if (m) { release(); setTimeout(() => menu && bDive.focus(), 100); } else document.activeElement.blur();
 };
 const go = () => {
-  sound(); ui(false); bDive.textContent = 'Resume';
-  // phones: go fullscreen and ask for landscape; where that is refused the CSS rotation still applies
-  if (mob) document.documentElement.requestFullscreen?.()?.then(() => screen.orientation.lock('landscape')).catch(() => 0);
-  if (!mob) capture();
+  sound(); ui(false); bDive.textContent = '继续潜水';
 };
 bDive.onclick = go; $('o').onclick = () => ui(true);
+$('sites').onchange = (event) => {
+  const select = event.target;
+  if (!select.value) return;
+  visit(Number(select.value) - 1);
+  select.selectedIndex = 0;
+  go();
+};
 // detail buttons: the current level is lit, the others reload the page with theirs
 $('q').querySelectorAll('button').forEach((b, i) => { if (i === 2 - LV) b.className = 'on'; else b.onclick = () => { keep('abyssal', 2 - i); location.reload(); }; });
 document.addEventListener('pointerlockchange', () => ui(!document.pointerLockElement));
 
 // draw the first frame and wait for the GPU to finish it (pipelines get compiled on first use) before the reveal
 lookAt(...POSES[0]);
-await say('Letting the light in…', 1, 400);
+actorYaw=F[YAW];
+await say('正在计算水下光照…', 1, 400);
+Object.assign(Wd,populateReefFish());
+const ibFish=buf(Wd.fish,BU.VERTEX);
 render(); await Q.onSubmittedWorkDone();
 setTimeout(keep, 15e3, 'abyssalLoad', ''); // the load counts as survived after 15 s of frames
 ui(true);

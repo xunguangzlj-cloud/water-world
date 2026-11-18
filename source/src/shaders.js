@@ -190,7 +190,7 @@ const WK = array<vec3f, 10>(vec3f(1., 2., 1.), vec3f(-2., 1., .9), vec3f(3., 1.,
 
 // ---------------------------------------------------------------- shared scene code
 const S_G = /*wgsl*/`
-struct G { vp: mat4x4f, sm: mat4x4f, cam: vec4f, right: vec4f, up: vec4f, fwd: vec4f, sun: vec4f, res: vec4f, mis: vec4f };
+struct G { vp: mat4x4f, sm: mat4x4f, cam: vec4f, right: vec4f, up: vec4f, fwd: vec4f, sun: vec4f, res: vec4f, mis: vec4f, act: vec4f };
 const SIG = vec3f(.058, .0235, .0195);
 const KD = vec3f(.056, .0245, .0170);
 const WCOL = vec3f(.16, .58, .90);
@@ -280,8 +280,30 @@ struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f, @location(1) n
   var sc = i.a.w;
   if (i.c.x < 1.5 && i.c.z > 1.5 && g.res.x > 0.) { sc *= 1. - ss(i.c.z * .7, i.c.z, distance(i.a.xyz, g.cam.xyz) / g.mis.z); }
   var w = i.a.xyz + qrot(i.b, i.p * sc);
+  var normal = i.n.xyz;
+  if (i.c.x == 6. && i.p.y > 1.5) {
+    let a = TAU * ss(0., 6., g.act.z);
+    let turn = mat2x2f(cos(a),sin(a),-sin(a),cos(a));
+    let v = turn * i.p.xz;
+    w = i.a.xyz + vec3f(v.x,i.p.y,v.y) * sc;
+    let n = turn * normal.xz; normal = vec3f(n.x,normal.y,n.y);
+  }
+  if (i.c.x == 9. && abs(i.p.x) < 1.1 && i.p.y < 4.4) {
+    let angle = .44 * sin(9. * g.act.y) * exp(-1.3 * g.act.y);
+    let dy = i.p.y - 4.38;
+    w.x += -dy * sin(angle); w.y += dy * (cos(angle)-1.);
+  }
+  if (i.c.x == 7.) {
+    let phase = g.cam.w * 1.6 + i.c.y * 45.;
+    let bell = .94 + .12 * sin(phase);
+    let trail = max(0., -i.p.y - .45);
+    var p = vec3f(i.p.x * bell, i.p.y * (2. - bell), i.p.z * bell);
+    p.x += trail * .13 * sin(phase - trail * 1.4);
+    p.z += trail * .10 * cos(phase - trail * 1.2);
+    w = i.a.xyz + qrot(i.b, p * sc) + vec3f(.55 * cos(phase * .28), .4 * sin(phase * .5), .35 * sin(phase * .28));
+  }
   w.y += sin(g.cam.w * .3 + i.c.y * 40.) * i.c.w;
-  o.cp = g.vp * vec4f(w, 1.); o.wp = w; o.n = qrot(i.b, i.n.xyz); o.op = i.p * i.a.w + i.c.y * 37.; o.on = i.n.xyz;
+  o.cp = g.vp * vec4f(w, 1.); o.wp = w; o.n = qrot(i.b, normal); o.op = i.p * i.a.w + i.c.y * 37.; o.on = normal;
   o.m = i.c; o.q = i.b; o.ao = i.n.w;
   return o;
 }
@@ -345,6 +367,25 @@ fn tri(p: vec3f, n: vec3f, s: f32) -> TP {
     alb *= .35 + .65 * ss(0., .12, min(pk, 1. - pk));
     alb = mix(alb, vec3f(.08, .22, .16), ss(.5, .7, A.c) * .6);
     gloss = .2; bump = .7;
+  } else if (mat == 6 || mat == 9) {
+    alb = mix(vec3f(.48,.24,.047), vec3f(.033,.24,.17), ss(.33,.64,A.c * .6 + B.c * .4));
+    gloss = .9; bump = .22; emi = vec3f(.08,.037,.004) * ss(.50,.67,B.h);
+    if (mat == 6) { emi += vec3f(.78,.40,.08) * sin(3.14159 * ss(0.,6.,g.act.z)) * ss(1.5,2.,i.op.y); }
+  } else if (mat == 7) {
+    let local = i.op - vec3f(sd * 37.);
+    let angle = atan2(local.z, local.x + .0001);
+    let rib = pow(.5 + .5 * cos(angle * 12.), 9.);
+    let rim = pow(1. - abs(dot(normalize(g.cam.xyz - i.wp), n0)), 2.);
+    let tint = mix(vec3f(.09,.78,.88), vec3f(.78,.22,.72), sd);
+    let pulse = .9 + .1 * sin(g.cam.w * 1.6 + sd * 45.);
+    alb = tint * .25; emi = tint * (.075 + .44 * rim + .29 * rib + .18 * ss(.75,1.,i.ao)) * pulse;
+    let arrival = distance(i.wp.xz,vec2f(-102.,40.)) / 5.;
+    let flash = ss(0.,.45,g.act.w-arrival) * ss(4.,.55,g.act.w-arrival);
+    emi += flash * mix(vec3f(.2,1.3,1.05), vec3f(.88,.4,1.4), sd) * (.35 + .9 * rim + rib);
+    bump = .035; gloss = .6;
+  } else if (mat == 8) {
+    let mineral = ss(.43,.59,B.h * .65 + A.c * .35 + .15 * sin(i.op.y * 8. + B.c * 5.));
+    alb = mix(vec3f(.06,.052,.046),vec3f(.64,.34,.058),mineral); gloss = .38; bump = 1.5;
   } else if (mat == 4) {
     let hue = fract(sd * 7.31);
     alb = mix(vec3f(.60, .17, .08), vec3f(.64, .35, .10), fract(hue * 3.));
@@ -440,6 +481,14 @@ fn pal(h: f32) -> vec3f {
   p += N2 * ruf;
   let sw = sway(i.a.xz, hA + (p.y - i.a.y), t);
   p.x += sw.x; p.z += sw.y;
+  if(!shp_ && cd<len+6.){
+    // 叶片在潜水者经过时向两侧拨开，近根处只轻微弯曲。
+    let swimmer=g.cam.xyz+(g.fwd.xyz-vec3f(0.,.12,0.))*g.mis.w-vec3f(0.,.46,0.);
+    let away=p-swimmer;
+    let dist=length(away);
+    let push=(1.-ss(.24,1.35,dist))*ss(0.,.45,v*len);
+    p+=push*away/max(.16,dist)*.94;
+  }
   o.cp = g.vp * vec4f(p, 1.); o.wp = p; o.n = normalize(N2 + S * u * .55 - T0 * cos(v * 10. + s2 * 30. + t * .6) * u * .7 * nearK); o.uv = vec2f(u, v);
   o.col = col; o.pr = pr; o.sd = vec2f(s1, s2); o.spc = spc;
   return o;
@@ -500,33 +549,116 @@ struct GO { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) @
 // ---------------------------------------------------------------- fish + mantas
 const W_ANIM = S_B + /*wgsl*/`
 struct VI { @location(0) p: vec3f, @location(1) n: vec4f, @location(2) a: vec4f, @location(3) b: vec4f };
-struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f, @location(1) n: vec3f, @location(2) op: vec3f, @location(3) @interpolate(flat) sd: f32, @location(4) lt: f32 };
+struct VO { @builtin(position) cp: vec4f, @location(0) wp: vec3f, @location(1) n: vec3f, @location(2) op: vec3f, @location(3) @interpolate(flat) sd: f32, @location(4) lt: f32, @location(5) part:f32 };
 @vertex fn vsFish(i: VI) -> VO {
-  var o: VO;
-  let s = i.b.x; let h = vec3f(hs(s), hs(s + .37), hs(s + .71));
-  let R = i.a.w; let t = g.cam.w;
-  let ta = t * i.b.y + i.b.w * 6.3 + (h.x - .5) * (26. / R);
-  let ph = i.b.w * 17.;
-  let P = i.a.xyz + vec3f(R * cos(ta), 2.2 * sin(3. * ta + ph), R * .6 * sin(ta));
-  let T = normalize(vec3f(-R * sin(ta), 6.6 * cos(3. * ta + ph), R * .6 * cos(ta))) * sign(i.b.y);
-  let S = normalize(cross(vec3f(0., 1., 0.), T)); let Up = cross(T, S);
-  let off = S * ((h.y - .5) * 5. + sin(t * .6 + s * 40.) * .5) + Up * ((h.z - .5) * 3.2 + cos(t * .5 + s * 31.) * .4);
-  var l = i.p * i.b.z * (.75 + .5 * h.z);
-  l.z += sin(t * 9. + s * 50. + l.x * 5.) * .22 * (.25 * i.b.z - l.x);
-  let w = P + off + T * l.x + Up * l.y + S * l.z;
-  o.cp = g.vp * vec4f(w, 1.); o.wp = w; o.n = T * i.n.x + Up * i.n.y + S * i.n.z; o.op = i.p; o.sd = s;
-  o.lt = shadow1(w);
+  var o:VO;
+  let kind=i32(floor(i.b.x)); let seed=fract(i.b.x); let h=vec3f(hs(seed),hs(seed+.37),hs(seed+.71));
+  let t=g.cam.w; let delta=i.a.xyz-g.cam.xyz;
+  let feed=ss(0.,2.,g.act.x)*ss(9.,5.8,g.act.x)*f32(kind>0 && kind<4 && length(i.a.xz-vec2f(4.8,3.2))<13.);
+  if(dot(delta,delta)>132.*132. || dot(delta,g.fwd.xyz)<-i.a.w-5.-13.*feed){o.cp=vec4f(0.,0.,2.,1.);return o;}
+  let alarm=ss(0.,.8,g.act.y)*ss(6.,1.5,g.act.y)*f32(kind==4 && i.a.x>40.);
+  let a=i.b.w*TAU+t*i.b.y+.035*sin(t*.64+seed*23.)+sign(i.b.y)*alarm*.80;
+  let yaw=i.a.x*.056+i.a.z*.041;let cy=cos(yaw);let sy=sin(yaw);
+  let r=mix(i.a.w+.75*(h.x-.5),2.2+.85*f32(kind)+.25*h.x,feed);
+  let cx=r*cos(a);let cz=r*(.68*sin(a)+.12*sin(2.*a+.6));
+  let dy=.50*cos(a+seed*3.)+.44*cos(2.*a+.7);
+  var P=mix(i.a.xyz,vec3f(4.8,-39.2,3.2),feed)+vec3f(cy*cx-sy*cz,(h.z-.5)*1.85+.50*sin(a+seed*3.)+.22*sin(2.*a+.7)+alarm*.80,sy*cx+cy*cz);
+  let tx=-r*sin(a);let tz=r*(.68*cos(a)+.24*cos(2.*a+.6));
+  let T=normalize(vec3f(cy*tx-sy*tz,dy,sy*tx+cy*tz))*sign(i.b.y);
+  let S=normalize(cross(T,vec3f(0.,1.,0.)));let U=cross(S,T);
+  let lengthScale=select(select(1.,1.08,kind==3),1.52,kind==4);
+  let x=i.p.x/lengthScale;
+  let beat=select(select(6.4,9.0,kind==1 || kind==0),4.5,kind==4);
+  let ph=t*beat*(.89+.23*h.y)+seed*37.+x*4.8;
+  let hinge=max(0.,.25-x);let amp=.26*hinge*hinge;
+  var l=i.p; l.z+=sin(ph)*amp;
+  let tag=i.n.w*127.;
+  if(tag>71.5 && tag<94.){let spread=ss(.08,.25,abs(l.z));l.y+=spread*.051*sin(t*5.3+seed*11.+sign(l.z)*.7);}
+  let bank=.085*sin(a+.7)*sign(i.b.y)+.04*sin(t*1.3+seed*16.);
+  let up=U*cos(bank)+S*sin(bank);let side=S*cos(bank)-U*sin(bank);
+  let w=P+(T*l.x+up*l.y+side*l.z)*i.b.z;
+  let slope=(4.8*cos(ph)*amp-.52*hinge*sin(ph))/lengthScale;
+  let ln=normalize(vec3f(i.n.x-slope*i.n.z,i.n.y,i.n.z));
+  o.cp=g.vp*vec4f(w,1.);o.wp=w;o.n=T*ln.x+up*ln.y+side*ln.z;o.op=vec3f(x,i.p.yz);o.sd=i.b.x;o.part=tag;o.lt=shadow1(w);
   return o;
 }
-@fragment fn fsFish(i: VO) -> @location(0) vec4f {
-  let n = normalize(i.n); let L = g.sun.xyz; let V = normalize(g.cam.xyz - i.wp);
-  let z = zone(i.wp); let vv = vol(i.wp);
-  var alb = mix(vec3f(.50, .68, .80), vec3f(.10, .22, .40), ss(-.05, .2, i.op.y));
-  alb = mix(alb, vec3f(.95, .8, .3), step(.86, fract(i.sd * 7.7)) * .6);
-  let E = sunE(i.wp.y, z) * i.lt;
-  var c = alb * (E * (.25 + .75 * sat(dot(n, L))) + amb(i.wp, n, vv.g, z) * 1.3);
-  c += E * pow(sat(dot(n, normalize(V + L))), 24.) * 1.6 + vec3f(.3, .6, .7) * pow(1. - sat(dot(n, V)), 3.) * .25 * vv.g;
-  return fin(fog(c, i.wp, z));
+@fragment fn fsFish(i:VO)->@location(0) vec4f {
+  let k=i32(floor(i.sd));let x=i.op.x;let y=i.op.y;let ink=vec3f(.010,.018,.035);
+  let finPart=i.part>21. && i.part<95.;let eye=i.part>95.;
+  var n=normalize(i.n);let V=normalize(g.cam.xyz-i.wp);let L=g.sun.xyz;
+  if(finPart && dot(n,V)<0.){n=-n;}
+  let hi=array<f32,5>(.145,.245,.35,.275,.112)[k];let yn=y/hi;
+  let belly=ss(.20,-.92,yn);
+  var alb=mix(vec3f(.075,.21,.27),vec3f(.72,.83,.81),belly);
+  if(k==0){alb=mix(alb,vec3f(.66,.77,.71),.67*ss(.17,.035,abs(yn+.02))); }
+  if(k==1){
+    let ridge=x+.025*cos(y*16.)-.065*yn*yn;
+    let band=min(abs(ridge-.24),min(abs(ridge+.045+.025*cos(y*26.)),abs(ridge+.345)));
+    let width=.042+.014*ss(.0,.70,yn);
+    alb=mix(vec3f(.72,.105,.012),vec3f(1.,.31,.025),belly*.68+.18);
+    alb=mix(alb,ink,ss(width+.028,width+.014,band));
+    alb=mix(alb,vec3f(.94,.92,.78),ss(width+.010,width-.006,band));
+  }else if(k==2){
+    alb=mix(vec3f(.94,.72,.14),vec3f(.96,.93,.78),ss(-.45,-.12,x));
+    let bars=min(abs(x-.18-.30*y),abs(x+.13-.42*y));
+    alb=mix(alb,vec3f(.020,.033,.040),ss(.09,.065,bars));
+    alb=mix(alb,ink,ss(.038,.018,abs(x-.34+.22*y))*.8);
+    if(y>.35){alb=mix(ink,vec3f(.97,.95,.82),ss(.35,.43,y));}
+  }else if(k==3){
+    alb=mix(vec3f(.018,.08,.53),vec3f(.035,.46,.91),.72*belly+.16);
+    let stripe=abs(y-(.11+.04*sin(8.*x)))-(.037+.040*ss(.10,-.32,x));
+    let flankMark=length((i.op.xy-vec2f(-.14,.05))*vec2f(3.8,12.));
+    alb=mix(alb,ink,max(ss(.018,-.010,stripe)*ss(.31,.24,x),ss(1.04,.89,flankMark)*ss(.43,.65,flankMark)));
+    if(x<-.43){alb=mix(ink,vec3f(.99,.72,.025),ss(-.44,-.49,x));}
+  }else if(k==4){
+    alb=mix(vec3f(.09,.22,.23),vec3f(.79,.84,.76),ss(.82,-.38,yn));
+    alb*=1.-.59*ss(.40,.94,cos(49.*x+13.*abs(y)))*ss(-.18,.62,yn)*ss(.33,.22,x);
+  }
+  let dist=distance(i.wp,g.cam.xyz);
+  let near=ss(11.,2.5,dist);
+  if(!finPart && !eye){
+    // 交错的鳞片边缘随距离淡出，避免远处产生闪烁。
+    let grid=vec2f((x+.022*yn*yn)*55.,(y-.018*sin(x*7.))*73.);
+    let uv=vec2f(fract(grid.x+.5*(floor(grid.y)%2.))-.5,fract(grid.y)-.54);
+    let scaleArc=length(uv*vec2f(1.,.79));
+    let scales=ss(.44,.53,scaleArc)*ss(.70,.58,scaleArc)*ss(.29,.18,x)*near;
+    let flake=hs(floor(grid.x+.5*(floor(grid.y)%2.))+19.31*floor(grid.y));
+    let pearly=vec3f(.22,.28,.25)*scales*(.35+.65*flake)*ss(.30,.12,x);
+    alb=alb*(1.-scales*.27)+pearly*.47;
+    let pigment=sin(x*30.+yn*2.)*sin(y*48.-x*11.)+.45*sin(x*89.+y*113.);
+    alb*=1.+.062*pigment+.12*(flake-.5)*near*ss(.35,.21,x);
+    let gill=abs(x-(.21+.075*yn*yn+.027*yn));
+    alb*=1.-.34*ss(.014,.003,gill)*ss(.90,.51,abs(yn));
+    let jaw=abs(y-(-.022-.024*ss(.54,.40,x)));
+    alb=mix(alb,ink,.69*ss(.007,.001,jaw)*ss(.39,.46,x));
+    let line=abs(y-(.018+.034*sin((x+.36)*3.8)));
+    alb+=vec3f(.035,.042,.037)*ss(.007,.002,line)*ss(.24,.14,x)*near;
+  }else if(finPart){
+    let group=floor((i.part+.3)/24.);let u=(i.part-group*24.)/20.;
+    let rib=.5+.5*cos(u*TAU*select(12.,17.,group==1.));
+    if(k==1){alb=mix(vec3f(.78,.21,.026),ink,.70*ss(.17,.205,abs(y))*f32(group==1.));}
+    if(k==2 && group!=2.){alb=vec3f(.98,.76,.12);}
+    if(k==3 && group==3.){alb=mix(vec3f(.04,.21,.6),vec3f(.99,.78,.075),ss(.16,.23,abs(i.op.z)));}
+    let outer=select(ss(.09,.25,abs(i.op.z)),ss(.46,.68,-x),group==1.);
+    alb=mix(alb,alb*.62+vec3f(.24,.25,.19),outer*.55);
+    alb*=.67+.36*rib*near+.13*belly;
+  }else{
+    alb=mix(vec3f(.033,.028,.022),vec3f(.48,.34,.12),ss(99.5,103.,i.part));
+    alb=mix(alb,ink,ss(106.,110.,i.part));
+  }
+  let zoneMix=zone(i.wp);let volume=vol(i.wp);let E=sunE(i.wp.y,zoneMix)*i.lt;
+  let H=normalize(V+L);let fres=pow(1.-sat(dot(n,V)),3.);
+  let light=amb(i.wp,n,volume.g,zoneMix)*1.12+E*(.19+.81*sat(dot(n,L)))+vec3f(.17,.19,.19);
+  let ca=caus(i.wp,dist);
+  var c=alb*light*(.89+.14*ss(-.5,.85,n.y)) + alb*E*ca*.32;
+  if(eye){
+    let ex=select(.33,.37,k==4);let ey=select(select(.32,.27,k==2),.32,k==4)*hi-.003;
+    let sparkle=length((i.op.xy-vec2f(ex+.010,ey+.008))*vec2f(1.1,1.));
+    c+=vec3f(.84,.94,1.)*ss(.009,.002,sparkle)*near;
+  }
+  c+=E*pow(sat(dot(n,H)),select(36.,85.,eye))*select(.47,1.9,eye);
+  c+=vec3f(.14,.43,.48)*fres*select(.26,.065,eye)*(volume.g+.30);
+  return fin(fog(c,i.wp,zoneMix));
 }
 @vertex fn vsManta(i: VI) -> VO {
   var o: VO;
@@ -626,16 +758,28 @@ struct VO { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) @
 fn quad(i: u32) -> vec2f { return vec2f(f32(i & 1u), f32(i >> 1u)) * 2. - 1.; }
 @vertex fn vsBub(@builtin(vertex_index) vi: u32, @location(0) a: vec4f, @location(1) b: vec4f) -> VO {
   var o: VO; let q = quad(vi); let t = g.cam.w;
+  if (b.z < 0.) {
+    let age = g.act.x - b.x * .6;
+    let spread = ss(0.,1.6,age);
+    let p = a.xyz + vec3f(cos(b.x*121.)*spread*(.35+b.w), -.23*age*b.y, sin(b.x*97.)*spread);
+    let size = a.w * ss(0.,.1,age) * ss(7.,4.+b.w*2.,age);
+    o.cp=g.vp*vec4f(p+(g.right.xyz*q.x+g.up.xyz*q.y)*size,1.);
+    o.uv=q; o.wp=p; o.pr=vec4f(b.x,size,1.,-1.); return o;
+  }
   let life = fract(t * b.y / b.z + b.x);
   let h = life * b.z;
   var p = a.xyz + vec3f(0., h, 0.);
   let wob = b.w * (.3 + h * .035);
   p.x += sin(t * 1.7 + b.x * 50. + h * .6) * wob + sin(h * .13 + b.x * 9.) * b.w * 2.;
   p.z += cos(t * 1.3 + b.x * 33. + h * .5) * wob + cos(h * .11 + b.x * 7.) * b.w * 2.;
-  let sz = a.w * (.55 + .7 * life) * ss(0., .03, life) * ss(0., -1.2, p.y);
+  var sz = a.w * (.55 + .7 * life) * ss(0., .03, life) * ss(0., -1.2, p.y);
+  if (a.w < 0.) {
+    sz = -a.w * (.28 + 2.7 * life);
+    p.x += h * h * .019;
+  }
   let w = p + (g.right.xyz * q.x + g.up.xyz * q.y) * sz;
   o.cp = g.vp * vec4f(w, 1.); o.uv = q; o.wp = p;
-  o.pr = vec4f(b.x, sz, shadow1(p), 0.);
+  o.pr = vec4f(b.x, sz, shadow1(p), select(0., .001 + life, a.w < 0.));
   return o;
 }
 @fragment fn fsBub(i: VO) -> @location(0) vec4f {
@@ -644,6 +788,10 @@ fn quad(i: u32) -> vec2f { return vec2f(f32(i & 1u), f32(i >> 1u)) * 2. - 1.; }
   let big = ss(.04, .22, i.pr.y);
   let r = length(i.uv) / (.9 + big * .05 * sin(an * 3. + t * 5. + i.pr.x * 40.) + big * .02 * sin(an * 5. - t * 7.));
   let aa = fwidth(r) * 1.5;
+  if (i.pr.w < 0.) {
+    let a = ss(1.,.6,length(i.uv));
+    return vec4f(fog(vec3f(1.1,.57,.14),i.wp,zone(i.wp))*a,a);
+  }
   let disc = 1. - ss(1. - aa, 1., r);
   let rim = ss(.55, .98, r);
   let hl = ss(.34, .0, length(i.uv - vec2f(-.36, .42))) + .5 * ss(.2, .0, length(i.uv - vec2f(.4, -.42)));
@@ -653,6 +801,11 @@ fn quad(i: u32) -> vec2f { return vec2f(f32(i & 1u), f32(i >> 1u)) * 2. - 1.; }
   let lo = fogIn(i.wp, vec3f(0., -1., 0.), 80., z, g.sun.xyz);
   var c = mix(lo, hi, ss(-.5, .8, i.uv.y + rim * .4)) * (.5 + 1.2 * rim) + E * hl * 1.6;
   var al = disc * sat(.03 + rim * rim * rim * .9 + hl);
+  if (i.pr.w > 0.) {
+    let density = ss(1., .12, length(i.uv)) * ss(0., .06, i.pr.w) * ss(1., .45, i.pr.w);
+    let curl = .72 + .28 * sin(an * 3. + length(i.uv) * 8. - t * .8 + i.pr.x * 11.);
+    c = vec3f(.005, .012, .016); al = density * curl * .24;
+  }
   let v = i.wp - g.cam.xyz; let d = length(v);
   let T = exp(-SIG.g * d) * ss(1.2, 3., d);
   c = c * T + fogIn(g.cam.xyz, v / d, d, z, g.sun.xyz) * (1. - T);

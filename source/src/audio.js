@@ -5,6 +5,18 @@
 // Layers: rumble, surface wash, water rush (follows camera speed), drone, bubbles, chimes and distant whale calls.
 let AC, OUT, muted = false;
 const VOL = 0.78; // master level: about -18.5 LUFS, peaks near -5.5 dBFS
+function ringBell() {
+  if (!AC || !OUT) return;
+  for (const hz of [168,428,731]) {
+    const tone=AC.createOscillator(), env=AC.createGain(), t=AC.currentTime;
+    tone.frequency.value=hz;
+    env.gain.setValueAtTime(.0001,t);
+    env.gain.exponentialRampToValueAtTime(.12*168/hz,t+.018);
+    env.gain.exponentialRampToValueAtTime(.0001,t+3);
+    tone.connect(env); env.connect(OUT); tone.start(t); tone.stop(t+3.05);
+    tone.onended=()=>{ tone.disconnect(); env.disconnect(); };
+  }
+}
 function mkSound(ac) {
   const sr = ac.sampleRate;
   // node of class C with options o, connected to every node / param in `to`; sources start at once

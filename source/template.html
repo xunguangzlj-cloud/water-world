@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang=en>
+<html lang=zh-CN>
 <head>
 <meta charset=utf-8>
-<title>Abyssal Garden</title>
-<meta name=viewport content="width=device-width,initial-scale=1">
+<title>水世界 · 深海花园</title>
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name=theme-color content=#03131c>
 <style>
 /* The class on <body> is the state of the page:
@@ -15,18 +15,16 @@ body {
   font: 700 clamp(13px, .7vw + .9vh, 36px)/1.4 system-ui, sans-serif; color: #e8fbff;
   -webkit-user-select: none; user-select: none;
 }
-/* a phone held upright gets the whole page turned on its side, so the scene is always landscape */
-@media (orientation: portrait) and (pointer: coarse) {
-  body { width: 100dvh; height: 100dvw; transform-origin: 0 0; transform: rotate(90deg) translateY(-100%); }
-}
+body { height:100dvh; }
 
 /* the scene: blurred and dimmed behind the menu, comes into focus when you dive */
 canvas {
-  position: absolute; width: 100%; height: 100%; touch-action: none; cursor: crosshair;
+  position: absolute; width: 100%; height: 100%; touch-action: none; cursor: grab;
   transition: filter 1s, transform 1s, opacity 2s;
 }
 body:not(.g) canvas { filter: blur(1vmax) brightness(.5); transform: scale(1.06); }
 .l canvas { opacity: 0; }
+canvas:active { cursor: grabbing; }
 
 /* menu: the loading bar and the buttons share one grid cell, so nothing jumps when they swap */
 #m {
@@ -35,6 +33,7 @@ body:not(.g) canvas { filter: blur(1vmax) brightness(.5); transform: scale(1.06)
   transition: opacity .5s, visibility .5s;
 }
 .g #m, .m #l, .l #g { opacity: 0; visibility: hidden; }
+.g #m { pointer-events:none; }
 h1 {
   margin: 0; font: 900 4.4em/1 system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase;
   color: #0000; background: linear-gradient(#fff 25%, #7ff3ff 60%, #14a9c4);
@@ -74,9 +73,8 @@ button:active, a:active { transform: translateY(.1em); filter: brightness(.9); }
   box-shadow: inset 0 -.2em #0003, 0 0 2em #19c3d6b3;
 }
 
-/* GitHub and Ko-fi: always at the bottom of the menu, in their own colours */
+/* 菜单底部的仓库入口 */
 #f { position: absolute; left: 0; right: 0; bottom: 1.5em; display: flex; justify-content: center; gap: 1em; font-size: .8em; }
-a + a { background: #ff5e5b; color: #fff; }
 svg { width: 1.5em; height: 1.5em; fill: currentColor; }
 
 /* dark plates under the dive button: detail level, list of controls, touch hint */
@@ -99,12 +97,11 @@ svg { width: 1.5em; height: 1.5em; fill: currentColor; }
   box-shadow: inset 0 -.15em #0004; color: #03222d; text-align: center;
 }
 #h { display: none; }
-@media (pointer: coarse), (max-height: 30em) {
+@media (max-height: 30em) {
   #k { display: none; }
 }
-@media (pointer: coarse) {
-  #h { display: block; }
-}
+.handheld #h { display:block; }
+.handheld #k { display:none; }
 
 /* in the scene: a small menu button (hidden while the mouse is captured, Esc does the same) and the stats line */
 #o {
@@ -117,40 +114,94 @@ svg { width: 1.5em; height: 1.5em; fill: currentColor; }
   position: absolute; top: 1em; left: 1.2em; margin: 0; font: .8em/1.6 ui-monospace, Consolas, monospace;
   white-space: pre-wrap; text-shadow: 0 1px 4px #000; pointer-events: none;
 }
+#k { gap:1em; white-space:nowrap } #k p + p { padding-left:1em }
+#sites { width:100%; padding:.7em 1em; border:1px solid #7ff3ff55; border-radius:.5em; color:#e8fbff; background:#062a38; font:inherit; cursor:pointer; }
+#field { display:none; position:absolute; left:max(1em,env(safe-area-inset-left)); bottom:max(1em,env(safe-area-inset-bottom)); width:min(22em,75%); }
+.g #field { display:block; }
+#observe { display:inline-flex; padding:.65em .9em; background:#072532dc; color:#dbf9f7; font-size:.82em; box-shadow:none; border:1px solid #7ff3ff66; }
+#observe[hidden] { display:none; }
+#action { display:inline-flex; vertical-align:middle; min-height:42px; margin:.25em 0; padding:.65em .9em; font-size:.85em; letter-spacing:.035em; color:#ddfff4; background:#103b39e0; border:1px solid #94dbc6ae; box-shadow:none; pointer-events:auto; }
+#action[hidden] { display:none; }
+#perspective { display:none; position:absolute; top:max(9px,env(safe-area-inset-top)); right:max(62px,calc(env(safe-area-inset-right) + 62px)); min-height:36px; padding:.45em .8em; border:1px solid #99cdc4a3; background:#072532ce; box-shadow:none; color:#e4fcf8; font-size:13px; letter-spacing:.04em; }
+.g #perspective {display:block}
+.handheld #perspective {min-height:44px;}
+.handheld #field {max-width:calc(100% - 194px);}
+#action:disabled { color:#d1e5e1; background:#102b35dd; border-color:#73978c; cursor:default; }
+html:not(.handheld) #action:enabled::before { content:'R'; border:1px solid #a7c9bc91; padding:.1em .35em; border-radius:.25em; font-size:.85em; }
+#note { margin-bottom:.55em; padding:.8em 1em; background:#04202de8; border-left:2px solid #77ded4; font-weight:500; line-height:1.65; }
+@media (max-height: 580px), (pointer:coarse) { #m { gap:.65em; padding-bottom:3em } #g {gap:.5em} #f {bottom:.65em} h1 { font-size:3.2em } }
+#mode { display:flex; justify-content:center; align-items:center; gap:.55em; min-height:32px; cursor:pointer; }
+#mode input { width:1.2em; height:1.2em; accent-color:#76dce2; }
+#handset { display:none; }
+.handheld .g #handset { display:block; pointer-events:none; }
+#stick, #depth button { touch-action:none; -webkit-touch-callout:none; pointer-events:auto; user-select:none; }
+#stick { --size:clamp(96px,24vmin,130px); position:absolute; width:var(--size); height:var(--size); bottom:max(16px,env(safe-area-inset-bottom)); left:max(16px,env(safe-area-inset-left)); border-radius:50%; border:1px solid #c3f4ec91; background:radial-gradient(circle,#072e4055 46%,#acdfe529 48%,#09314473 52%); box-shadow:inset 0 0 0 5px #cee9e813; }
+#stick i { position:absolute; height:34%; width:34%; top:33%; left:33%; border-radius:50%; background:#d6fcf0b3; box-shadow:0 2px 9px #06262a88; pointer-events:none; }
+#stick::before, #stick::after { content:""; position:absolute; inset:4px 49%; border-block:5px solid #d2f7ed9c; }
+#stick::after { transform:rotate(90deg); }
+#depth { position:absolute; right:max(16px,env(safe-area-inset-right)); bottom:max(16px,env(safe-area-inset-bottom)); display:grid; gap:6px; }
+#depth button { height:44px; min-width:64px; padding:0 .65em; border:1px solid #bbede284; border-radius:14px; background:#09334099; color:#edfff8; font:600 14px system-ui,sans-serif; letter-spacing:.05em; box-shadow:none; }
+#depth button.held { color:#093340; background:#c7eee5dd; }
+.handheld #o { min-height:44px; min-width:44px; top:max(8px,env(safe-area-inset-top)); right:max(10px,env(safe-area-inset-right)); }
+.handheld #field { top:max(10px,env(safe-area-inset-top)); left:max(12px,env(safe-area-inset-left)); bottom:auto; width:min(21em,70%); display:none; flex-direction:column-reverse; align-items:start; pointer-events:none; gap:.3em; }
+.handheld .g #field { display:flex; }
+.handheld #observe { pointer-events:auto; min-height:40px; }
+.handheld #m { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; overflow-y:auto; box-sizing:border-box; padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); gap:min(3vh,18px); }
+.handheld #m h1 { margin-top:auto; }
+.handheld #a { flex:none; }
+.handheld #f { position:static; margin-bottom:auto; }
+.handheld #g { gap:6px; }
+.handheld #h { padding:.55em 1em; line-height:1.6; text-transform:none; }
+@media (orientation:landscape) and (max-height:480px) {
+  .handheld #m { gap:6px; }
+  .handheld #m h1 { font-size:2.2em; }
+  .handheld #d { padding:.55em; }
+}
 </style>
 </head>
 <body class=l>
-<canvas id=c></canvas>
+<canvas id=c aria-label="可自由游动的三维海底世界"></canvas>
 <div id=m>
-  <h1>Abyssal Garden</h1>
+  <h1>深海花园</h1>
   <div id=a>
-    <div id=l><div id=p><i id=b></i></div><p id=s>Diving…</p><p id=w hidden>Use Google Chrome for optimal experience</p></div>
+    <div id=l><div id=p><i id=b></i></div><p id=s>准备下潜…</p><p id=w hidden>推荐使用支持 WebGPU 的 Chrome 或 Edge 浏览器</p></div>
     <div id=g>
-      <button id=d>Dive in</button>
-      <p id=q><span>Detail</span><button>Low</button><button>Medium</button><button>High</button></p>
+      <button id=d>开始潜水</button>
+      <select id=sites aria-label="前往潜点">
+        <option value="">前往潜点…</option>
+        <optgroup label="西侧新海域"><option value="7">7　潮汐星盘 · 转动铜环</option><option value="8">8　水母洄游湾 · 拨动水流</option><option value="9">9　热液烟囱群</option></optgroup>
+        <optgroup label="原有海域"><option value="1">1　鲸尾石雕 · 投喂礁鱼</option><option value="2">2　沉船峡谷 · 敲钟</option><option value="3">3　通天石柱</option><option value="4">4　海绵花园</option><option value="5">5　海藻盆地</option><option value="6">6　紫色岩窟</option></optgroup>
+      </select>
+      <p id=q><span>画质</span><button>低</button><button>中</button><button>高</button></p>
+      <label id=mode><input type=checkbox id=handMode>手机操控</label>
       <div id=k>
         <p>
-          <i><b>W</b><b>A</b><b>S</b><b>D</b></i>Swim
-          <i><b>Q</b><b>E</b></i>Down / up
-          <i><b>Shift</b></i>Faster
-          <i><b>1</b>–<b>6</b></i>Viewpoints
+          <i><b>W</b><b>A</b><b>S</b><b>D</b></i>游动
+          <i><b>Q</b><b>E</b></i>下潜 / 上浮
+          <i><b>Shift</b></i>加速
+          <i><b>1</b>–<b>9</b></i>切换潜点
         </p>
         <p>
-          <i><b>Esc</b></i>Menu
-          <i><b>M</b></i>Mute
-          <i><b>H</b></i>Stats
+          <i><b>左键拖动</b></i>转动视角
+          <i><b>Esc</b></i>菜单
+          <i><b>M</b></i>开关声音
+          <i><b>H</b></i>性能数据
+          <i><b>V</b></i>切换人称
         </p>
       </div>
-      <p id=h>Hold to swim forward · slide to steer · second finger to go faster</p>
+      <p id=h>左手推摇杆游动，推到外圈加速。右手滑动画面转头，按住上浮或下潜调整深度。</p>
     </div>
   </div>
   <p id=f>
-    <a href=https://github.com/Noniv/abyssal-garden target=_blank><svg viewBox="0 0 16 16"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>GitHub</a>
-    <a href=https://ko-fi.com/noniv target=_blank><svg viewBox="0 0 24 24"><path fill-rule=evenodd d="M2 5h16.5a4.5 4.5 0 0 1 0 9H17a6 6 0 0 1-6 5H8a6 6 0 0 1-6-6zM17 8v3h1.5a1.5 1.5 0 0 0 0-3zM9.5 15.5 5.9 12a2.2 2.2 0 0 1 3.6-2.5 2.2 2.2 0 0 1 3.6 2.5z"/></svg>Support</a>
+    <a href=https://github.com/xunguangzlj-cloud/water-world target=_blank rel=noopener><svg viewBox="0 0 16 16"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>GitHub</a>
   </p>
 </div>
-<button id=o aria-label=Menu>≡</button>
+<button id=o aria-label=打开菜单>≡</button>
+<button id=perspective type=button title="切换第一、第三人称（V）">切换人称</button>
+<div id=handset><div id=stick role=group aria-label="游动摇杆"><i></i></div><div id=depth><button id=rise>上浮</button><button id=sink>下潜</button></div></div>
 <pre id=i></pre>
+<aside id=field><p id=note hidden></p><button id=observe hidden aria-controls=note aria-expanded=false title="查看或收起观察笔记（F）">观察</button> <button id=action hidden aria-live=polite></button></aside>
+<script id=actor-data type=application/octet-stream>AVATAR_PAYLOAD</script>
 <script>
 /*SCRIPT*/
 </script>
