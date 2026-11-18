@@ -2,7 +2,8 @@
 //   npm run build            minified
 //   npm run build:readable   unminified, for debugging
 //   npm run build:dev        ../dev.html: unminified, plus the development tools in src/dev.js
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +32,7 @@ if (readable) {
   html = tpl.replace(/<style>([^]*?)(?=<\/style>)/, css).replace(/>\s+</g, '><').replace('/*SCRIPT*/', () => code).replace(/<script>\s+/, '<script>').replace(/\s+<\/script>/, '</script>');
 }
 // 将角色和署名嵌入游戏，下载单个 HTML 即可离线游玩。
-const player = readFileSync(path.join(here, 'assets', 'player.bin')).toString('base64');
+const player = readFileSync(path.join(here, 'assets', 'player.bin'));
 const license = readFileSync(path.join(here, '..', 'LICENSE'), 'utf8').replaceAll('\r\n', '\n');
 const notice = `<!--
 角色模型和服饰贴图来自暖光玩具房 V30：https://v25.dafeiyugame.site/
@@ -39,7 +40,18 @@ const notice = `<!--
 以下许可适用于原作 Abyssal Garden：https://github.com/Noniv/abyssal-garden
 ${license}
 -->`;
-html = html.replace('AVATAR_PAYLOAD', () => player).replace('<head>', () => '<head>\n' + notice);
+html = html.replace('<head>', () => '<head>\n' + notice);
+if (!readable) {
+  // 在线版让角色并行加载，离线版仍然只需要一个 HTML 文件。
+  const docs = path.join(here, '..', 'docs');
+  mkdirSync(docs, { recursive: true });
+  const version = createHash('sha256').update(player).digest('hex').slice(0, 12);
+  const embedded = 'type=application/octet-stream>AVATAR_PAYLOAD</script>';
+  if (!html.includes(embedded)) throw Error('找不到角色资源入口');
+  writeFileSync(path.join(docs, 'player.bin'), player);
+  writeFileSync(path.join(docs, 'index.html'), html.replace(embedded, `type=application/octet-stream data-src="player.bin?v=${version}"></script>`));
+}
+html = html.replace('AVATAR_PAYLOAD', () => player.toString('base64'));
 writeFileSync(path.join(here, '..', out), html);
 const gz = gzipSync(Buffer.from(html), { level: 9 }).length;
 console.log(`${out}: ${(html.length / 1024).toFixed(1)} kB${readable ? ' (readable)' : ''}, ${(gz / 1024).toFixed(1)} kB gzipped`);

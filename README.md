@@ -2,7 +2,7 @@
 
 一个可以自由游动的中文 WebGPU 海底世界。从鲸尾石雕出发，可以穿过海藻林、游进沉船峡谷，也可以去水母洄游湾拨动水流，看水母依次亮起来。
 
-**[在线游玩](https://abyssal-garden-zh-swim.xunguangzlj.chatgpt.site/)** · [下载单文件离线版](https://raw.githubusercontent.com/xunguangzlj-cloud/water-world/main/index.html)
+**[在线游玩](https://xunguangzlj-cloud.github.io/water-world/)** · [下载单文件离线版](https://raw.githubusercontent.com/xunguangzlj-cloud/water-world/main/index.html)
 
 ## 怎么玩
 
